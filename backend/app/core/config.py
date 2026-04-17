@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     app_port: int = Field(default=8000, alias="APP_PORT")
     frontend_origin: str = Field(default="http://localhost:5173", alias="FRONTEND_ORIGIN")
 
-    google_places_api_key: str = Field(default="", alias="GOOGLE_PLACES_API_KEY")
+    google_places_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_PLACES_API_KEY", "GOOGLE_API_KEY"),
+    )
     google_places_text_search_url: str = Field(
         default="https://maps.googleapis.com/maps/api/place/textsearch/json",
         alias="GOOGLE_PLACES_TEXT_SEARCH_URL",
