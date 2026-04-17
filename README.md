@@ -45,7 +45,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set `GOOGLE_PLACES_API_KEY` in `backend/.env`.
+Set `GOOGLE_API_KEY` or `GOOGLE_PLACES_API_KEY` in `backend/.env`.
 
 4. Run backend server:
 
@@ -142,8 +142,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Set these in the Vercel dashboard for the project:
 
-- `GOOGLE_PLACES_API_KEY`
+- `GOOGLE_API_KEY` or `GOOGLE_PLACES_API_KEY`
+- `OPENAI_API_KEY`
 - `FRONTEND_ORIGIN`
+- `LEAD_MAX_RESULTS`
+- `SCRAPER_TIMEOUT_SECONDS`
 - `EMAIL_HOST`
 - `EMAIL_PORT`
 - `EMAIL_USER`
@@ -155,7 +158,9 @@ Set these in the Vercel dashboard for the project:
 
 Notes:
 - Use `FRONTEND_ORIGIN=https://your-vercel-project.vercel.app`
-- If you later add OpenAI-backed AI analysis in production, also set `OPENAI_API_KEY`
+- `OPENAI_API_KEY` is safe to configure now even though the current app does not yet require it at runtime
+- Keep `LEAD_MAX_RESULTS` between `10` and `15` for Vercel-friendly response times
+- Set `SCRAPER_TIMEOUT_SECONDS=5` to keep scraping under serverless limits
 
 ### Deploy to Vercel
 
@@ -185,6 +190,7 @@ Frontend requests are Vercel-safe and use:
 
 - Website scraping and enrichment should stay fast; keep request timeouts low.
 - Avoid long-running tasks in request/response cycles.
+- `/health` is exposed directly in local development and under `/api/health` on Vercel.
 - If AI or bulk enrichment becomes heavier later, move that work to a queue/background job system.
 
 ## Core Business Rules

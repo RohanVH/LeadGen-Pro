@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
 
 from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class LocationDatasetService:
@@ -41,17 +44,18 @@ class LocationDatasetService:
             "hateoasMode": "false",
         }
 
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(
-                self._settings.geodb_cities_url.format(country_code=country_code),
-                params=params,
-                headers=headers,
-            )
-
-        if response.status_code != 200:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(
+                    self._settings.geodb_cities_url.format(country_code=country_code),
+                    params=params,
+                    headers=headers,
+                )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("GeoDB city lookup failed for country '%s'.", country_name, exc_info=exc)
             return []
-
-        payload = response.json()
         cities = [
             {
                 "city": item.get("city", ""),
@@ -79,18 +83,19 @@ class LocationDatasetService:
             "hateoasMode": "false",
         }
 
-        async with httpx.AsyncClient(timeout=15) as client:
-            response = await client.get(
-                self._settings.geodb_countries_url,
-                params=params,
-                headers=headers,
-            )
-
-        if response.status_code != 200:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                response = await client.get(
+                    self._settings.geodb_countries_url,
+                    params=params,
+                    headers=headers,
+                )
+            response.raise_for_status()
+            payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("GeoDB country code lookup failed for '%s'.", country_name, exc_info=exc)
             self._country_code_cache[country_name] = None
             return None
-
-        payload = response.json()
         data: list[dict[str, Any]] = payload.get("data", [])
         resolved = next(
             (

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 class WebsiteAnalyzerService:
@@ -26,7 +29,7 @@ class WebsiteAnalyzerService:
         try:
             response = requests.get(
                 url,
-                timeout=self._timeout,
+                timeout=min(self._timeout, 5),
                 headers={
                     "User-Agent": (
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -36,7 +39,8 @@ class WebsiteAnalyzerService:
                 allow_redirects=True,
             )
             response.raise_for_status()
-        except requests.RequestException:
+        except requests.RequestException as exc:
+            logger.warning("Website analysis failed for %s.", url, exc_info=exc)
             return "WEAK_WEBSITE"
 
         response_time = time.perf_counter() - started_at

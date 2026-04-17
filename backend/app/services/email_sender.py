@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import smtplib
 from email.message import EmailMessage
 
 from fastapi import HTTPException, status
 
 from app.core.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class EmailSenderService:
@@ -35,11 +38,13 @@ class EmailSenderService:
                 server.login(self._settings.email_user, self._settings.email_pass)
                 server.send_message(email_message)
         except smtplib.SMTPException as exc:
+            logger.exception("SMTP delivery failed for recipient '%s'.", to_email, exc_info=exc)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Failed to send outreach email.",
             ) from exc
         except OSError as exc:
+            logger.exception("SMTP server connection failed for recipient '%s'.", to_email, exc_info=exc)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Unable to reach the configured email server.",

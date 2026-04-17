@@ -1,6 +1,37 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "http://localhost:8000" : "/api");
 
+async function parseJsonSafely(response) {
+  const text = await response.text();
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+async function apiRequest(path, options = {}) {
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, options);
+  } catch {
+    throw new Error("Something went wrong. Please try again.");
+  }
+
+  const payload = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw new Error(payload.detail || "Something went wrong. Please try again.");
+  }
+
+  return payload;
+}
+
 const buildQuery = (params) => {
   const searchParams = new URLSearchParams();
   searchParams.set("city", params.city);
@@ -13,14 +44,7 @@ const buildQuery = (params) => {
 
 export async function searchLeads(params) {
   const queryString = buildQuery(params);
-  const response = await fetch(`${API_BASE_URL}/leads/search?${queryString}`);
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.detail || "Unable to fetch leads.");
-  }
-
-  return payload;
+  return apiRequest(`/leads/search?${queryString}`);
 }
 
 export function exportLeadsCsv(params) {
@@ -29,20 +53,13 @@ export function exportLeadsCsv(params) {
 }
 
 export async function sendOutreachEmail(payload) {
-  const response = await fetch(`${API_BASE_URL}/outreach/send-email`, {
+  return apiRequest("/outreach/send-email", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   });
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.detail || "Unable to send outreach email.");
-  }
-
-  return data;
 }
 
 export async function fetchLocationSuggestions({ query, country }) {
@@ -52,12 +69,7 @@ export async function fetchLocationSuggestions({ query, country }) {
     searchParams.set("country", country);
   }
 
-  const response = await fetch(`${API_BASE_URL}/locations/autocomplete?${searchParams.toString()}`);
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.detail || "Unable to fetch location suggestions.");
-  }
+  const payload = await apiRequest(`/locations/autocomplete?${searchParams.toString()}`);
 
   return payload.suggestions ?? [];
 }
@@ -66,12 +78,7 @@ export async function fetchPopularLocations(country) {
   const searchParams = new URLSearchParams();
   searchParams.set("country", country);
 
-  const response = await fetch(`${API_BASE_URL}/locations/popular?${searchParams.toString()}`);
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.detail || "Unable to fetch popular locations.");
-  }
+  const payload = await apiRequest(`/locations/popular?${searchParams.toString()}`);
 
   return payload.suggestions ?? [];
 }
@@ -80,12 +87,5 @@ export async function fetchLocationDetails(placeId) {
   const searchParams = new URLSearchParams();
   searchParams.set("placeId", placeId);
 
-  const response = await fetch(`${API_BASE_URL}/locations/details?${searchParams.toString()}`);
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.detail || "Unable to fetch location details.");
-  }
-
-  return payload;
+  return apiRequest(`/locations/details?${searchParams.toString()}`);
 }

@@ -14,7 +14,7 @@ const initialForm = {
   placeId: "",
 };
 
-function SearchForm({ onSearch, loading }) {
+function SearchForm({ onSearch, loading, loadingStage }) {
   const [form, setForm] = useState(initialForm);
 
   const setType = useCallback((type) => {
@@ -87,6 +87,14 @@ function SearchForm({ onSearch, loading }) {
         <p className="text-xs text-slate-500 dark:text-slate-400">
           Structured search for cleaner, location-accurate lead generation.
         </p>
+        <div
+          className={`mt-2 overflow-hidden text-xs font-medium text-indigo-600 transition-all duration-300 dark:text-indigo-300 ${
+            loading ? "max-h-8 opacity-100" : "max-h-0 opacity-0"
+          }`}
+          aria-live="polite"
+        >
+          {loadingStage || "Fetching leads..."}
+        </div>
       </div>
 
       <div className="sm:col-span-3">
@@ -121,13 +129,13 @@ function SearchForm({ onSearch, loading }) {
         <button
           type="submit"
           disabled={!canSearch}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors duration-200 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 disabled:hover:translate-y-0 dark:disabled:bg-indigo-900"
         >
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
             <circle cx="11" cy="11" r="6" />
             <path d="m20 20-3.5-3.5" />
           </svg>
-          {loading ? "Searching..." : "Search"}
+          {loading ? loadingStage || "Fetching leads..." : "Search"}
         </button>
       </div>
     </form>

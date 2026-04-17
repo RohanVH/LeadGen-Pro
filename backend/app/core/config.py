@@ -34,7 +34,8 @@ class Settings(BaseSettings):
         default="https://maps.googleapis.com/maps/api/place/autocomplete/json",
         alias="GOOGLE_PLACES_AUTOCOMPLETE_URL",
     )
-    lead_max_results: int = Field(default=20, alias="LEAD_MAX_RESULTS")
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    lead_max_results: int = Field(default=12, alias="LEAD_MAX_RESULTS")
     scraper_max_concurrency: int = Field(default=6, alias="SCRAPER_MAX_CONCURRENCY")
     scraper_timeout_seconds: int = Field(default=6, alias="SCRAPER_TIMEOUT_SECONDS")
     email_host: str = Field(default="", alias="EMAIL_HOST")

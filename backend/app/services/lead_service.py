@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 
 from app.core.config import Settings
@@ -12,9 +13,13 @@ from app.services.email_scraper import EmailScraperService
 from app.services.google_places import GooglePlacesService
 from app.services.website_analyzer import WebsiteAnalyzerService
 
+logger = logging.getLogger(__name__)
+
 
 class LeadService:
     """Coordinates search, processing, and enrichment of lead data."""
+
+    MAX_RESULTS_CEILING = 15
 
     def __init__(
         self,
@@ -41,7 +46,15 @@ class LeadService:
             city=city,
             country=country,
         )
-        limited_places = filtered_places[: self._settings.lead_max_results]
+        max_results = max(1, min(self._settings.lead_max_results, self.MAX_RESULTS_CEILING))
+        limited_places = filtered_places[:max_results]
+        logger.info(
+            "Lead search for query '%s' returned %s places, %s after filtering, %s after limiting.",
+            query,
+            len(places),
+            len(filtered_places),
+            len(limited_places),
+        )
 
         semaphore = asyncio.Semaphore(self._settings.scraper_max_concurrency)
         tasks = [
@@ -66,6 +79,8 @@ class LeadService:
     ) -> Lead | None:
         place_id = place.get("place_id")
         details = await self._places_service.get_place_details(place_id=place_id) if place_id else {}
+        if place_id and not details:
+            logger.info("Proceeding without place details for place_id '%s'.", place_id)
 
         website = details.get("website")
         phone_number = details.get("formatted_phone_number")

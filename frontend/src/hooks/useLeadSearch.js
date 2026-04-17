@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { searchLeads } from "../services/leadService";
 
+const DEFAULT_ERROR_MESSAGE = "Something went wrong. Please try again.";
+
 export function useLeadSearch() {
   const [query, setQuery] = useState({ city: "", type: "", country: "" });
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState("");
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
   const [hotLeadsOnly, setHotLeadsOnly] = useState(false);
@@ -44,9 +47,18 @@ export function useLeadSearch() {
   }, [leads]);
 
   const submitSearch = async (nextQuery) => {
+    if (loading) {
+      return;
+    }
+
     setLoading(true);
+    setLoadingStage("Fetching leads...");
     setError("");
     setQuery(nextQuery);
+    const analysisTimer = window.setTimeout(() => {
+      setLoadingStage("Analyzing businesses...");
+    }, 1200);
+
     try {
       const data = await searchLeads(nextQuery);
       setLeads(data.leads ?? []);
@@ -54,9 +66,11 @@ export function useLeadSearch() {
     } catch (err) {
       setLeads([]);
       setTotal(0);
-      setError(err.message || "Unexpected error occurred.");
+      setError(err.message || DEFAULT_ERROR_MESSAGE);
     } finally {
+      window.clearTimeout(analysisTimer);
       setLoading(false);
+      setLoadingStage("");
     }
   };
 
@@ -66,6 +80,7 @@ export function useLeadSearch() {
     filteredLeads,
     total,
     loading,
+    loadingStage,
     error,
     filter,
     setFilter,

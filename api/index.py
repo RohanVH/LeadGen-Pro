@@ -13,6 +13,7 @@ BACKEND_DIR = PROJECT_ROOT / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.main import app  # noqa: E402
+from app.main import create_app  # noqa: E402
 
+app = create_app()
 handler = Mangum(app)

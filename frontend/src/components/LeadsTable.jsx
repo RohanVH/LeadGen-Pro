@@ -70,11 +70,12 @@ function WhatsAppIcon() {
   );
 }
 
-function LeadsTable({ leads, loading }) {
+function LeadsTable({ leads, loading, loadingStage }) {
   const [sentStatus, setSentStatus] = useState({});
   const [sendingRows, setSendingRows] = useState({});
   const [messageCache, setMessageCache] = useState({});
   const [toast, setToast] = useState(null);
+  const [rowStatus, setRowStatus] = useState({});
 
   useEffect(() => {
     if (!toast) {
@@ -93,11 +94,13 @@ function LeadsTable({ leads, loading }) {
     }
 
     const leadKey = getLeadKey(lead, index);
+    setRowStatus((prev) => ({ ...prev, [leadKey]: "Generating message..." }));
     const message = messageCache[leadKey] || generateOutreachMessage(lead);
     const subject = generateOutreachSubject(lead);
 
     setMessageCache((prev) => ({ ...prev, [leadKey]: message }));
     setSendingRows((prev) => ({ ...prev, [leadKey]: true }));
+    setRowStatus((prev) => ({ ...prev, [leadKey]: "Sending email..." }));
 
     try {
       await sendLeadEmail({
@@ -111,6 +114,7 @@ function LeadsTable({ leads, loading }) {
       setToast({ type: "error", message: error.message || "Email delivery failed." });
     } finally {
       setSendingRows((prev) => ({ ...prev, [leadKey]: false }));
+      setRowStatus((prev) => ({ ...prev, [leadKey]: "" }));
     }
   };
 
@@ -120,15 +124,18 @@ function LeadsTable({ leads, loading }) {
     }
 
     const leadKey = getLeadKey(lead, index);
+    setRowStatus((prev) => ({ ...prev, [leadKey]: "Generating message..." }));
     const message = messageCache[leadKey] || generateOutreachMessage(lead);
     setMessageCache((prev) => ({ ...prev, [leadKey]: message }));
 
     const whatsappUrl = buildWhatsAppLink(lead.phoneNumber, message);
     if (!whatsappUrl) {
+      setRowStatus((prev) => ({ ...prev, [leadKey]: "" }));
       setToast({ type: "error", message: "This phone number is not valid for WhatsApp." });
       return;
     }
 
+    setRowStatus((prev) => ({ ...prev, [leadKey]: "" }));
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   };
 
@@ -136,7 +143,7 @@ function LeadsTable({ leads, loading }) {
     return (
       <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-gray-50 p-10 text-center text-sm text-slate-600 shadow-card transition-colors duration-200 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
         <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
-        Fetching and enriching leads...
+        {loadingStage || "Fetching leads..."}
       </div>
     );
   }
@@ -144,7 +151,7 @@ function LeadsTable({ leads, loading }) {
   if (!leads.length) {
     return (
       <div className="rounded-xl border border-slate-200 bg-gray-50 p-8 text-center text-sm text-slate-600 shadow-card transition-colors duration-200 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
-        No leads found. Try a different city or business type.
+        No leads found. Try a different location or business type.
       </div>
     );
   }
@@ -230,7 +237,7 @@ function LeadsTable({ leads, loading }) {
                         type="button"
                         onClick={() => handleSendEmail(lead, index)}
                         disabled={!lead.email || sendingRows[getLeadKey(lead, index)]}
-                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition-colors duration-200 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 dark:disabled:bg-indigo-900"
+                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 disabled:hover:translate-y-0 dark:disabled:bg-indigo-900"
                       >
                         <MailIcon />
                         {sendingRows[getLeadKey(lead, index)] ? "Sending..." : "Send Email"}
@@ -239,11 +246,16 @@ function LeadsTable({ leads, loading }) {
                         type="button"
                         onClick={() => handleWhatsApp(lead, index)}
                         disabled={!lead.phoneNumber}
-                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors duration-200 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-200 dark:disabled:bg-emerald-900"
+                        className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-emerald-500 disabled:cursor-not-allowed disabled:bg-emerald-200 disabled:hover:translate-y-0 dark:disabled:bg-emerald-900"
                       >
                         <WhatsAppIcon />
                         WhatsApp
                       </button>
+                      {rowStatus[getLeadKey(lead, index)] ? (
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          {rowStatus[getLeadKey(lead, index)]}
+                        </span>
+                      ) : null}
                       {sentStatus[getLeadKey(lead, index)] === "sent" ? (
                         <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200">
                           Sent

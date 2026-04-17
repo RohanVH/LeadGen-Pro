@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+logger = logging.getLogger(__name__)
 
 
 class EmailScraperService:
@@ -83,14 +86,16 @@ class EmailScraperService:
         try:
             response = requests.get(
                 url,
-                timeout=self._timeout,
+                timeout=min(self._timeout, 5),
                 headers=self.DEFAULT_HEADERS,
                 allow_redirects=True,
             )
             if response.status_code >= 400:
+                logger.warning("Email scraper received status %s for %s.", response.status_code, url)
                 return None
             return response.text
-        except requests.RequestException:
+        except requests.RequestException as exc:
+            logger.warning("Email scraper request failed for %s.", url, exc_info=exc)
             return None
 
     def _find_email(self, html: str) -> str | None:
@@ -116,4 +121,3 @@ class EmailScraperService:
         if not parsed.netloc:
             return None
         return f"{parsed.scheme}://{parsed.netloc}"
-
