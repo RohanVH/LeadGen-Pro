@@ -34,10 +34,14 @@ def create_app() -> FastAPI:
 
     application.include_router(api_router, prefix="/v1")
 
-    @application.get("/health", tags=["health"])
-    async def health() -> dict[str, str]:
-        """Health endpoint for monitoring and readiness checks."""
-        return {"status": "ok"}
+@application.get("/health", tags=["health"])
+async def health() -> dict[str, str]:
+    """Health endpoint for monitoring and readiness checks."""
+    return {"status": "ok"}
+
+@application.get("/v1/test")
+def test():
+    return {"status": "working"}
 
     return application
 
