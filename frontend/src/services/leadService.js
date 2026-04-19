@@ -44,16 +44,16 @@ const buildQuery = (params) => {
 
 export async function searchLeads(params) {
   const queryString = buildQuery(params);
-return apiRequest(`/v1/leads/search?${queryString}`);
+return apiRequest(`/leads/search?${queryString}`);
 }
 
 export function exportLeadsCsv(params) {
   const queryString = buildQuery(params);
-window.open(`${API_BASE_URL}/v1/leads/export?${queryString}`, "_blank");
+window.open(`${API_BASE_URL}/leads/export?${queryString}`, "_blank");
 }
 
 export async function sendOutreachEmail(payload) {
-return apiRequest("/v1/outreach/send-email", {
+return apiRequest("/outreach/send-email", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -69,7 +69,7 @@ export async function fetchLocationSuggestions({ query, country }) {
     searchParams.set("country", country);
   }
 
-const payload = await apiRequest(`/v1/locations/autocomplete?${searchParams.toString()}`);
+const payload = await apiRequest(`/locations/autocomplete?${searchParams.toString()}`);
 
   return payload.suggestions ?? [];
 }
@@ -78,7 +78,7 @@ export async function fetchPopularLocations(country) {
   const searchParams = new URLSearchParams();
   searchParams.set("country", country);
 
-const payload = await apiRequest(`/v1/locations/popular?${searchParams.toString()}`);
+const payload = await apiRequest(`/locations/popular?${searchParams.toString()}`);
 
   return payload.suggestions ?? [];
 }
@@ -87,5 +87,5 @@ export async function fetchLocationDetails(placeId) {
   const searchParams = new URLSearchParams();
   searchParams.set("placeId", placeId);
 
-return apiRequest(`/v1/locations/details?${searchParams.toString()}`);
+return apiRequest(`/locations/details?${searchParams.toString()}`);
 }
