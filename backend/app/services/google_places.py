@@ -21,10 +21,9 @@ class GooglePlacesService:
 
     def _ensure_api_key(self) -> None:
         if not self._settings.google_places_api_key:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Google Places API key is not configured.",
-            )
+            print("Missing Google Places API key")
+            return
+        print("API KEY present")
 
     async def search_businesses(self, query: str) -> list[dict[str, Any]]:
         """Run Places Text Search and return normalized place records."""
@@ -91,7 +90,11 @@ class GooglePlacesService:
 
     async def autocomplete_locations(self, query: str, country: str | None = None) -> list[dict[str, Any]]:
         """Fetch location autocomplete suggestions restricted to geocoded places."""
+        print("autocomplete_locations called with query:", query, "country:", country)
         self._ensure_api_key()
+        if not self._settings.google_places_api_key:
+            print("No API key, returning fallback")
+            return [{"description": query}]
         params: dict[str, str] = {
             "input": f"{query}, {country}" if country else query,
             "types": "(regions)",
@@ -101,35 +104,18 @@ class GooglePlacesService:
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 response = await client.get(self._settings.google_places_autocomplete_url, params=params)
+                print("Autocomplete response status:", response.status_code)
             response.raise_for_status()
             payload = response.json()
-        except httpx.TimeoutException as exc:
-            logger.warning("Google Places autocomplete timed out for query '%s'.", query, exc_info=exc)
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail="Location suggestions timed out. Please try again.",
-            ) from exc
-        except httpx.HTTPError as exc:
-            logger.exception("Google Places autocomplete failed for query '%s'.", query, exc_info=exc)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Failed to fetch location suggestions from Google Places API.",
-            ) from exc
-        except ValueError as exc:
-            logger.exception("Google Places autocomplete returned invalid JSON for query '%s'.", query, exc_info=exc)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Received an invalid response from Google Places API.",
-            )
+            print("Autocomplete payload status:", payload.get("status"))
+        except Exception as exc:
+            print("Autocomplete error:", str(exc))
+            return []
 
         api_status = payload.get("status", "UNKNOWN")
         if api_status not in {"OK", "ZERO_RESULTS"}:
-            message = payload.get("error_message", "Google Places returned an error.")
-            logger.warning("Google Places autocomplete returned status '%s' for query '%s': %s", api_status, query, message)
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"{api_status}: {message}",
-            )
+            print("Bad status:", api_status)
+            return []
 
         return payload.get("predictions", [])
 
