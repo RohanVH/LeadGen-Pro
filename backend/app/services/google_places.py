@@ -1,10 +1,11 @@
+"""Google Places client service."""
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-import httpx
-
+import requests
 from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -16,167 +17,107 @@ class GooglePlacesService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def _has_api_key(self) -> bool:
-        return bool(self._settings.google_places_api_key)
-
-    async def _safe_request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Safe HTTP request that NEVER crashes."""
+    def _safe_request(self, url, params):
         try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                response = await client.get(url, params=params)
-
+            print(f"Making request to {url}")
+            response = requests.get(url, params=params, timeout=5)
+            print(f"Response status: {response.status_code}")
             if response.status_code != 200:
-                logger.warning("Bad response status: %s", response.status_code)
+                print("Bad status code")
                 return {}
-
-            try:
-                return response.json()
-            except Exception:
-                logger.warning("Invalid JSON response")
-                return {}
-
+            data = response.json()
+            return data
         except Exception as e:
-            logger.warning("Request failed: %s", str(e))
+            print(f"Request error: {str(e)}")
             return {}
 
-    async def search_businesses(self, query: str) -> list[dict[str, Any]]:
-        """Safe search (never throws)."""
-        if not self._has_api_key():
-            logger.warning("Missing Google API key")
+    def _ensure_api_key(self):
+        if not self._settings.google_places_api_key:
+            print("Missing Google Places API key")
+            return False
+        print("API KEY present")
+        return True
+
+    def search_businesses(self, query: str) -> list[dict[str, Any]]:
+        """Run Places Text Search and return normalized place records."""
+        if not self._ensure_api_key():
             return []
-
-        params = {
-            "query": query,
-            "key": self._settings.google_places_api_key,
-        }
-
-        payload = await self._safe_request(
-            self._settings.google_places_text_search_url,
-            params,
-        )
-
+        params = {"query": query, "key": self._settings.google_places_api_key}
+        payload = self._safe_request(self._settings.google_places_text_search_url, params)
         if not payload:
             return []
-
         api_status = payload.get("status", "UNKNOWN")
-
         if api_status not in {"OK", "ZERO_RESULTS"}:
-            logger.warning("Google API bad status: %s", api_status)
+            print(f"Bad status: {api_status}")
             return []
-
         return payload.get("results", [])
 
-    async def get_place_details(self, place_id: str) -> dict[str, Any]:
-        """Safe details fetch."""
-        if not self._has_api_key():
+    def get_place_details(self, place_id: str) -> dict[str, Any]:
+        """Fetch details used to enrich lead output."""
+        if not self._ensure_api_key():
             return {}
-
         params = {
             "place_id": place_id,
             "fields": "formatted_phone_number,website",
             "key": self._settings.google_places_api_key,
         }
-
-        payload = await self._safe_request(
-            self._settings.google_places_details_url,
-            params,
-        )
-
-        if payload.get("status") != "OK":
+        payload = self._safe_request(self._settings.google_places_details_url, params)
+        if not payload:
             return {}
-
+        if payload.get("status") != "OK":
+            print("Bad details status")
+            return {}
         return payload.get("result", {})
 
-    async def autocomplete_locations(
-        self, query: str, country: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Safe autocomplete (never crashes)."""
-        if not self._has_api_key():
+    def autocomplete_locations(self, query: str, country: str | None = None) -> list[dict[str, Any]]:
+        """Fetch location autocomplete suggestions."""
+        print(f"autocomplete_locations query: {query}, country: {country}")
+        if not self._ensure_api_key():
+            print("No API key, fallback")
             return [{"description": query}]
-
         params = {
             "input": f"{query}, {country}" if country else query,
             "types": "(regions)",
             "key": self._settings.google_places_api_key,
         }
-
-        payload = await self._safe_request(
-            self._settings.google_places_autocomplete_url,
-            params,
-        )
-
+        payload = self._safe_request(self._settings.google_places_autocomplete_url, params)
         if not payload:
             return []
-
         api_status = payload.get("status", "UNKNOWN")
-
         if api_status not in {"OK", "ZERO_RESULTS"}:
+            print(f"Bad autocomplete status: {api_status}")
             return []
-
         return payload.get("predictions", [])
 
-    async def popular_locations(self, country: str) -> list[dict[str, Any]]:
-        """Safe popular locations (with fallback)."""
-        try:
-            places = await self.search_businesses(
-                query=f"major cities in {country}"
-            )
-        except Exception as e:
-            logger.warning("Popular locations failed: %s", str(e))
-            places = []
-
-        deduped_results: list[dict[str, Any]] = []
-        seen_names: set[str] = set()
-
-        country_normalized = country.strip().lower()
-
+    def popular_locations(self, country: str) -> list[dict[str, Any]]:
+        """Fetch popular locations fallback."""
+        places = self.search_businesses(f"major cities in {country}")
+        if not places:
+            print("No places, fallback cities")
+            return [{"name": "Mumbai"}, {"name": "Delhi"}, {"name": "Bangalore"}]
+        deduped = []
+        seen = set()
         for place in places:
-            name = (place.get("name") or "").strip()
-            if not name:
-                continue
+            name = (place.get("name") or "").strip().lower()
+            if name not in seen and len(deduped) < 10:
+                seen.add(name)
+                deduped.append(place)
+        return deduped
 
-            normalized = name.lower()
-
-            if normalized == country_normalized:
-                continue
-
-            if normalized in seen_names:
-                continue
-
-            seen_names.add(normalized)
-            deduped_results.append(place)
-
-            if len(deduped_results) >= 10:
-                break
-
-        # 🔥 HARD FALLBACK (prevents empty UI)
-        if not deduped_results:
-            return [
-                {"name": "Mumbai"},
-                {"name": "Delhi"},
-                {"name": "Bangalore"},
-                {"name": "Chennai"},
-            ]
-
-        return deduped_results
-
-    async def get_location_details(self, place_id: str) -> dict[str, Any]:
-        """Safe location details."""
-        if not self._has_api_key():
+    def get_location_details(self, place_id: str) -> dict[str, Any]:
+        """Fetch location details."""
+        if not self._ensure_api_key():
             return {}
-
         params = {
             "place_id": place_id,
-            "fields": "address_component,geometry,formatted_address,name",
+            "fields": "address_components,geometry,formatted_address,name",
             "key": self._settings.google_places_api_key,
         }
-
-        payload = await self._safe_request(
-            self._settings.google_places_details_url,
-            params,
-        )
-
-        if payload.get("status") != "OK":
+        payload = self._safe_request(self._settings.google_places_details_url, params)
+        if not payload:
             return {}
-
+        if payload.get("status") != "OK":
+            print("Bad location details")
+            return {}
         return payload.get("result", {})
+
