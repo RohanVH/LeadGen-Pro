@@ -44,6 +44,12 @@ def test():
     return {"status": "working"}
 
     return application
+@application.get("/v1/debug")
+def debug():
+    from app.core.config import settings
+    return {
+        "google_key_exists": bool(settings.GOOGLE_API_KEY)
+    }
 
 
 app = create_app()
