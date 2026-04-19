@@ -14,67 +14,75 @@ router = APIRouter(prefix="/locations", tags=["locations"])
 
 
 @router.get("/autocomplete", response_model=LocationSuggestionsResponse)
-async def autocomplete_locations(
+def autocomplete_locations(
     q: str = Query(..., min_length=2, max_length=120),
     country: str | None = Query(default=None, min_length=2, max_length=120),
     places_service: GooglePlacesService = Depends(get_google_places_service),
 ) -> LocationSuggestionsResponse:
     """Return location suggestions from Google Places Autocomplete."""
-    predictions = await places_service.autocomplete_locations(query=q, country=country)
-    suggestions = [
-        LocationSuggestion(
-            placeId=prediction["place_id"],
-            mainText=prediction.get("structured_formatting", {}).get("main_text") or prediction.get("description", ""),
-            secondaryText=prediction.get("structured_formatting", {}).get("secondary_text") or "",
-        )
-        for prediction in predictions
-    ]
-    return LocationSuggestionsResponse(suggestions=suggestions)
+    try:
+        predictions = places_service.autocomplete_locations(query=q, country=country)
+        suggestions = [
+            LocationSuggestion(
+                placeId=prediction["place_id"],
+                mainText=prediction.get("structured_formatting", {}).get("main_text") or prediction.get("description", ""),
+                secondaryText=prediction.get("structured_formatting", {}).get("secondary_text") or "",
+            )
+            for prediction in predictions
+        ]
+        return LocationSuggestionsResponse(suggestions=suggestions)
+    except Exception as e:
+        print("Autocomplete error:", str(e))
+        return LocationSuggestionsResponse(suggestions=[])
 
 
 @router.get("/popular", response_model=LocationSuggestionsResponse)
-async def popular_locations(
+def popular_locations(
     country: str = Query(..., min_length=2, max_length=120),
     places_service: GooglePlacesService = Depends(get_google_places_service),
     location_dataset_service: LocationDatasetService = Depends(get_location_dataset_service),
 ) -> LocationSuggestionsResponse:
     """Return popular cities and towns using GeoDB first, then fallbacks."""
-    suggestions: list[LocationSuggestion] = []
+    try:
+        suggestions: list[LocationSuggestion] = []
 
-    dataset_cities = await location_dataset_service.get_cities_by_country(country_name=country)
-    if dataset_cities:
+        dataset_cities = location_dataset_service.get_cities_by_country(country_name=country)
+        if dataset_cities:
+            suggestions = [
+                LocationSuggestion(
+                    placeId=f"dataset:{country}:{item['city']}",
+                    mainText=item["city"],
+                    secondaryText=", ".join(part for part in [item["state"], item["country"]] if part),
+                )
+                for item in dataset_cities[:20]
+            ]
+            return LocationSuggestionsResponse(suggestions=suggestions)
+
+        places = places_service.popular_locations(country=country)
+        if places:
+            suggestions = [
+                LocationSuggestion(
+                    placeId=place["place_id"],
+                    mainText=place.get("name", ""),
+                    secondaryText=place.get("formatted_address", ""),
+                )
+                for place in places[:20]
+            ]
+            return LocationSuggestionsResponse(suggestions=suggestions)
+
+        seed_locations = LOCATION_SEEDS.get(country, [])
         suggestions = [
             LocationSuggestion(
-                placeId=f"dataset:{country}:{item['city']}",
-                mainText=item["city"],
-                secondaryText=", ".join(part for part in [item["state"], item["country"]] if part),
+                placeId=f"seed:{country}:{city}",
+                mainText=city,
+                secondaryText=country,
             )
-            for item in dataset_cities[:20]
+            for city in seed_locations[:20]
         ]
         return LocationSuggestionsResponse(suggestions=suggestions)
-
-    places = await places_service.popular_locations(country=country)
-    if places:
-        suggestions = [
-            LocationSuggestion(
-                placeId=place["place_id"],
-                mainText=place.get("name", ""),
-                secondaryText=place.get("formatted_address", ""),
-            )
-            for place in places[:20]
-        ]
-        return LocationSuggestionsResponse(suggestions=suggestions)
-
-    seed_locations = LOCATION_SEEDS.get(country, [])
-    suggestions = [
-        LocationSuggestion(
-            placeId=f"seed:{country}:{city}",
-            mainText=city,
-            secondaryText=country,
-        )
-        for city in seed_locations[:20]
-    ]
-    return LocationSuggestionsResponse(suggestions=suggestions)
+    except Exception as e:
+        print("Popular locations error:", str(e))
+        return LocationSuggestionsResponse(suggestions=[])
 
 
 @router.get("/details", response_model=SelectedLocation)
