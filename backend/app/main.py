@@ -32,7 +32,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    application.include_router(api_router)
+    application.include_router(api_router, prefix="/v1")
 
     @application.get("/health", tags=["health"])
     async def health() -> dict[str, str]:
