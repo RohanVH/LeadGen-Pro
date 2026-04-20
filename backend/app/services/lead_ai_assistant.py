@@ -69,6 +69,9 @@ class LeadAIAssistantService:
         email = (context.email or "").strip() or "not available"
         phone = (context.phone_number or "").strip() or "not available"
         website = (context.website or "").strip() or "not available"
+        wc_raw = (context.website_content or "").strip()
+        if len(wc_raw) > 6000:
+            wc_raw = wc_raw[:6000] + "\n[website text truncated for chat context size]"
         return (
             "You are a practical B2B sales assistant helping with ONE selected business lead from a CRM table.\n"
             "Rules:\n"
@@ -87,7 +90,7 @@ class LeadAIAssistantService:
             f"Website URL (from our data): {website}\n"
             f"Rating: {context.rating if context.rating is not None else 'unknown'}\n"
             f"Review snippets: {reviews}\n"
-            f"Website text notes (scraped, may be short): {context.website_content or 'none'}\n"
+            f"Website text notes (scraped, may be short): {wc_raw or 'none'}\n"
             f"AI overview: {context.overview or 'none'}\n"
             f"Suggested offer: {context.what_to_sell or 'unknown'}\n"
             f"Outreach angle: {context.outreach_angle or 'none'}"
@@ -154,28 +157,32 @@ class LeadAIAssistantService:
         if not self._settings.openai_api_key:
             logger.warning("OpenAI chat skipped: missing OPENAI_API_KEY")
             return None
+        model = self._settings.openai_model
+        base_payload: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": 0.6,
+            "max_tokens": 1200,
+        }
         try:
-            payload: dict[str, Any] = {
-                "model": self._settings.openai_model,
-                "messages": messages,
-                "temperature": 0.6,
-                "max_tokens": 1200,
-            }
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self._settings.openai_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                url = f"{self._settings.openai_base_url.rstrip('/')}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {self._settings.openai_api_key}",
+                    "Content-Type": "application/json",
+                }
+                response = await client.post(url, headers=headers, json=base_payload)
                 if response.status_code >= 400:
-                    logger.warning(
-                        "OpenAI chat HTTP %s: %s",
-                        response.status_code,
-                        response.text[:800],
-                    )
+                    err_txt = response.text[:900]
+                    logger.warning("OpenAI chat HTTP %s: %s", response.status_code, err_txt)
+                    if response.status_code == 400 and (
+                        "max_tokens" in err_txt or "max_completion_tokens" in err_txt
+                    ):
+                        retry = {k: v for k, v in base_payload.items() if k != "max_tokens"}
+                        retry["max_completion_tokens"] = 1200
+                        response = await client.post(url, headers=headers, json=retry)
+                        if response.status_code >= 400:
+                            logger.warning("OpenAI chat retry HTTP %s: %s", response.status_code, response.text[:600])
                 response.raise_for_status()
                 data = response.json()
                 choice = (data.get("choices") or [{}])[0]
@@ -190,8 +197,24 @@ class LeadAIAssistantService:
             return None
 
     def _gemini_chat_model_id(self) -> str:
-        """Lead AI chat uses GEMINI_CHAT_MODEL (defaults to gemini-2.0-flash in settings)."""
+        """Same model as batch/analyze unless GEMINI_CHAT_MODEL is set explicitly."""
         return (self._settings.gemini_chat_model or "").strip() or self._settings.gemini_model
+
+    def _gemini_model_fallback_chain(self) -> list[str]:
+        """Try chat model first, then the analyze model, then common ids (deduped)."""
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for mid in (
+            self._gemini_chat_model_id(),
+            self._settings.gemini_model,
+            "gemini-1.5-flash",
+            "gemini-2.0-flash",
+        ):
+            m = (mid or "").strip()
+            if m and m not in seen:
+                seen.add(m)
+                ordered.append(m)
+        return ordered
 
     @staticmethod
     def _openai_history_to_gemini_contents(openai_history: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -248,7 +271,6 @@ class LeadAIAssistantService:
             logger.warning("Gemini chat skipped: missing GEMINI_API_KEY")
             return None
 
-        model_id = self._gemini_chat_model_id()
         api_key = self._settings.gemini_api_key
         base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
@@ -270,75 +292,80 @@ class LeadAIAssistantService:
             async with httpx.AsyncClient(timeout=90.0) as client:
                 return await client.post(url, json=body)
 
-        try:
-            body_primary: dict[str, Any] = {
-                "systemInstruction": {"parts": [{"text": system_prompt}]},
-                "contents": contents,
-                "generationConfig": gen_cfg,
-                "safetySettings": self._gemini_safety_settings(),
-            }
-            url = build_url(model_id)
-            response = await post_json(url, body_primary)
-
-            if response.status_code >= 400:
-                logger.warning(
-                    "Gemini chat HTTP %s model=%s: %s",
-                    response.status_code,
-                    model_id,
-                    response.text[:1200],
-                )
-                body_fb: dict[str, Any] = {
-                    "contents": [],
-                    "generationConfig": gen_cfg,
-                    "safetySettings": self._gemini_safety_settings(),
+        body_fb: dict[str, Any] = {
+            "contents": [],
+            "generationConfig": gen_cfg,
+            "safetySettings": self._gemini_safety_settings(),
+        }
+        if contents:
+            sys_as_user = (
+                "System / lead context (follow these facts when answering):\n\n"
+                f"{system_prompt}\n\n---\nContinue the conversation below."
+            )
+            first = contents[0]
+            if first["role"] == "user":
+                combined = f"{sys_as_user}\n\n{first['parts'][0]['text']}"
+                body_fb["contents"] = [{"role": "user", "parts": [{"text": combined}]}, *contents[1:]]
+            else:
+                body_fb["contents"] = [{"role": "user", "parts": [{"text": sys_as_user}]}, *contents]
+        else:
+            body_fb["contents"] = [
+                {
+                    "role": "user",
+                    "parts": [{"text": f"{system_prompt}\n\nUser: {fallback_user_text.strip()}"}],
                 }
-                if contents:
-                    sys_as_user = (
-                        "System / lead context (follow these facts when answering):\n\n"
-                        f"{system_prompt}\n\n---\nContinue the conversation below."
-                    )
-                    first = contents[0]
-                    if first["role"] == "user":
-                        combined = f"{sys_as_user}\n\n{first['parts'][0]['text']}"
-                        body_fb["contents"] = [{"role": "user", "parts": [{"text": combined}]}, *contents[1:]]
-                    else:
-                        body_fb["contents"] = [{"role": "user", "parts": [{"text": sys_as_user}]}, *contents]
-                else:
-                    body_fb["contents"] = [
-                        {
-                            "role": "user",
-                            "parts": [{"text": f"{system_prompt}\n\nUser: {fallback_user_text.strip()}"}],
-                        }
-                    ]
-                response = await post_json(url, body_fb)
-                if response.status_code >= 400:
-                    alt_models = []
-                    if model_id != "gemini-2.0-flash":
-                        alt_models.append("gemini-2.0-flash")
-                    if model_id != "gemini-1.5-flash":
-                        alt_models.append("gemini-1.5-flash")
-                    for alt in alt_models:
-                        logger.warning("Gemini chat retrying with model %s", alt)
-                        response = await post_json(
-                            build_url(alt),
-                            {**body_primary, "systemInstruction": body_primary["systemInstruction"]},
-                        )
-                        if response.status_code < 400:
-                            break
-                    if response.status_code >= 400:
-                        logger.warning(
-                            "Gemini chat HTTP %s after fallbacks: %s",
-                            response.status_code,
-                            response.text[:800],
-                        )
-                        return None
+            ]
 
-            response.raise_for_status()
-            data = response.json()
-            text, err = self._extract_gemini_text(data)
-            if text:
-                return text
-            logger.warning("Gemini chat no usable text: %s", err or data)
+        body_primary: dict[str, Any] = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": contents,
+            "generationConfig": gen_cfg,
+            "safetySettings": self._gemini_safety_settings(),
+        }
+
+        def try_parse(resp: httpx.Response) -> str | None:
+            if resp.status_code >= 400:
+                return None
+            resp.raise_for_status()
+            text, err = self._extract_gemini_text(resp.json())
+            if not text:
+                logger.warning("Gemini chat empty body: %s", err)
+            return text
+
+        try:
+            for model_id in self._gemini_model_fallback_chain():
+                url = build_url(model_id)
+                response = await post_json(url, body_primary)
+                if response.status_code >= 400:
+                    logger.warning(
+                        "Gemini chat HTTP %s model=%s: %s",
+                        response.status_code,
+                        model_id,
+                        response.text[:900],
+                    )
+                else:
+                    try:
+                        t = try_parse(response)
+                        if t:
+                            return t
+                    except Exception:
+                        logger.warning("Gemini chat parse failed model=%s", model_id, exc_info=True)
+
+                response_fb = await post_json(url, body_fb)
+                if response_fb.status_code >= 400:
+                    logger.warning(
+                        "Gemini chat fallback HTTP %s model=%s: %s",
+                        response_fb.status_code,
+                        model_id,
+                        response_fb.text[:600],
+                    )
+                else:
+                    try:
+                        t = try_parse(response_fb)
+                        if t:
+                            return t
+                    except Exception:
+                        logger.warning("Gemini chat fallback parse failed model=%s", model_id, exc_info=True)
 
             one_shot = (
                 f"{system_prompt}\n\n"
@@ -350,13 +377,32 @@ class LeadAIAssistantService:
                 "generationConfig": gen_cfg,
                 "safetySettings": self._gemini_safety_settings(),
             }
-            response2 = await post_json(build_url(model_id), body_simple)
-            if response2.status_code < 400:
-                response2.raise_for_status()
-                text2, err2 = self._extract_gemini_text(response2.json())
-                if text2:
-                    return text2
-                logger.warning("Gemini one-shot failed: %s", err2)
+            for model_id in self._gemini_model_fallback_chain():
+                response2 = await post_json(build_url(model_id), body_simple)
+                if response2.status_code >= 400:
+                    continue
+                try:
+                    t = try_parse(response2)
+                    if t:
+                        return t
+                except Exception:
+                    continue
+
+            body_plain = {
+                "contents": [{"role": "user", "parts": [{"text": one_shot}]}],
+                "generationConfig": gen_cfg,
+            }
+            for model_id in self._gemini_model_fallback_chain():
+                response3 = await post_json(build_url(model_id), body_plain)
+                if response3.status_code >= 400:
+                    continue
+                try:
+                    t = try_parse(response3)
+                    if t:
+                        return t
+                except Exception:
+                    continue
+
             return None
         except Exception as exc:
             logger.warning("Gemini chat failed.", exc_info=exc)
@@ -395,10 +441,56 @@ class LeadAIAssistantService:
                 return f"Website: {website}"
             return f"We don't have a website URL stored for {lead_name}. Search the business name to find it."
 
-        review_signal = "limited social proof" if not lead_context.get("reviews") else "existing customer feedback"
+        reviews_raw = lead_context.get("reviews") or []
+        reviews = [str(r).strip() for r in reviews_raw if str(r).strip()]
+
+        supportish = any(
+            k in msg_lower
+            for k in (
+                "support",
+                "customer service",
+                "good service",
+                "bad service",
+                "staff",
+                "friendly",
+                "helpful",
+                "care",
+                "experience",
+                "reputation",
+                "trustworthy",
+                "reliable",
+                "quality",
+            )
+        ) or ("review" in msg_lower and "?" in message)
+
+        if supportish or ("customer" in msg_lower and "?" in message):
+            if reviews:
+                preview = " | ".join(reviews[:3])[:600]
+                if len(preview) >= 600:
+                    preview = preview[:597] + "..."
+                rating_bit = f" Their Google rating in our export is {rating}." if rating is not None else ""
+                return (
+                    f"We don't have live AI right now, but from Google review text for {lead_name}: "
+                    f"customers mention things like: {preview}{rating_bit} "
+                    "High stars plus positive wording usually implies people felt well treated, but reviews rarely spell out "
+                    "'customer support' as a department. On a call, ask how they handle after-hours issues and new-patient questions."
+                )
+            if rating is not None:
+                return (
+                    f"We only have the aggregate Google rating ({rating}) for {lead_name}, not review text in this export. "
+                    "A strong rating usually correlates with good experiences overall, but it is not proof of phone/chat support quality. "
+                    "Ask them directly how patients reach a clinician after hours."
+                )
+            return (
+                f"We don't have review snippets or a rating in this row for {lead_name}, so we can't infer support quality from data. "
+                "Check Google Maps reviews or ask on discovery: average response time, after-hours coverage, and how complaints are handled."
+            )
+
+        review_signal = "limited social proof" if not reviews else "existing customer feedback"
         condition = f"rating {rating}" if rating is not None else "unknown rating"
         return (
             f"(Offline mode) For {lead_name} ({business_type}): use {review_signal} and {condition}. "
-            f'Regarding your question: "{message}" — prioritize one concrete next step (e.g. audit call, offer, or follow-up) '
-            "based on the table data. Full AI chat is unavailable; check API keys and try again."
+            f'About your question: "{message}" — use the table fields above on your call. '
+            "The AI chat request did not return a usable reply from the model (timeout, model name, or provider error). "
+            "If this persists, set GEMINI_CHAT_MODEL to the same value as GEMINI_MODEL or check server logs for the exact HTTP error."
         )

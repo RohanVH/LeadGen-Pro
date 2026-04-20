@@ -44,9 +44,9 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", validation_alias=AliasChoices("GEMINI_API_KEY", "gemini_api_key"))
     gemini_model: str = Field(default="gemini-1.5-flash", alias="GEMINI_MODEL")
     gemini_chat_model: str = Field(
-        default="gemini-2.0-flash",
+        default="",
         alias="GEMINI_CHAT_MODEL",
-        description="Model for Lead AI chat. Use gemini-1.5-flash if 2.0 is unavailable in your project.",
+        description="Optional Lead AI chat model; when empty, uses GEMINI_MODEL (same as analyze).",
     )
     ai_max_leads: int = Field(default=12, alias="AI_MAX_LEADS")
     ai_batch_size: int = Field(default=4, alias="AI_BATCH_SIZE")
