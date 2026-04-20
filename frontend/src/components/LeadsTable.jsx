@@ -403,10 +403,14 @@ function LeadsTable({ leads, loading, loadingStage }) {
           name: activeLead.name,
           businessType: activeLead.businessType || "business",
           websiteContent: activeLead.websiteContent || "",
-          rating: activeLead.rating || null,
+          rating: activeLead.rating ?? null,
           reviews: activeLead.googleReviews || [],
           overview: analysis?.overview || "",
           whatToSell: analysis?.whatToSell || "",
+          outreachAngle: analysis?.outreachAngle || "",
+          email: activeLead.email || null,
+          phoneNumber: activeLead.phoneNumber || null,
+          website: activeLead.website || null,
         },
       };
       console.log("Lead chat request payload", chatPayload);

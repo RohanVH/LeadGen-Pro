@@ -1,7 +1,9 @@
 """Interactive AI assistant for per-lead analysis and follow-up chat."""
 
 from __future__ import annotations
+
 import logging
+from typing import Any
 
 import httpx
 from app.core.config import Settings
@@ -10,6 +12,7 @@ from app.schemas.lead_ai import (
     LeadAnalyzeResponse,
     LeadChatRequest,
     LeadChatResponse,
+    LeadContext,
 )
 from app.services.ai_router import AIRouterService
 
@@ -56,6 +59,48 @@ class LeadAIAssistantService:
             ),
         )
 
+    def _build_chat_system_prompt(self, context: LeadContext) -> str:
+        """Single system message with all lead facts so the model can answer factual questions."""
+        reviews = " | ".join(str(r) for r in context.reviews[:6] if str(r).strip()) if context.reviews else "none"
+        email = (context.email or "").strip() or "not available"
+        phone = (context.phone_number or "").strip() or "not available"
+        website = (context.website or "").strip() or "not available"
+        return (
+            "You are a practical B2B sales assistant helping with ONE selected business lead from a CRM table.\n"
+            "Rules:\n"
+            "- Answer the user's question directly using the facts below. Do not invent email, phone, or URLs.\n"
+            "- If email/phone/website are marked 'not available', say clearly we do not have them and suggest next steps "
+            "(e.g. check their website, LinkedIn, or call the listed phone).\n"
+            "- Keep replies concise (a few short paragraphs unless asked for detail).\n"
+            "- Stay focused on this lead only.\n\n"
+            f"Lead name: {context.name}\n"
+            f"Business type: {context.business_type}\n"
+            f"Email (from our data): {email}\n"
+            f"Phone (from our data): {phone}\n"
+            f"Website URL (from our data): {website}\n"
+            f"Rating: {context.rating if context.rating is not None else 'unknown'}\n"
+            f"Review snippets: {reviews}\n"
+            f"Website text notes (scraped, may be short): {context.website_content or 'none'}\n"
+            f"AI overview: {context.overview or 'none'}\n"
+            f"Suggested offer: {context.what_to_sell or 'unknown'}\n"
+            f"Outreach angle: {context.outreach_angle or 'none'}"
+        )
+
+    @staticmethod
+    def _history_to_openai_messages(history: list[dict[str, str]]) -> list[dict[str, str]]:
+        """Map chat history to OpenAI roles (assistant/user only)."""
+        out: list[dict[str, str]] = []
+        for item in history:
+            role = (item.get("role") or "user").lower()
+            content = (item.get("content") or "").strip()
+            if not content:
+                continue
+            if role == "assistant":
+                out.append({"role": "assistant", "content": content})
+            else:
+                out.append({"role": "user", "content": content})
+        return out
+
     async def chat(self, payload: LeadChatRequest) -> LeadChatResponse:
         """Continue a contextual conversation for a specific lead."""
         context = payload.lead_context or payload.lead
@@ -63,117 +108,194 @@ class LeadAIAssistantService:
             return LeadChatResponse(response="Please provide lead context so I can give a targeted answer.")
 
         history_source = payload.messages or payload.previous_conversation
-        history = [{"role": msg.role, "content": msg.content} for msg in history_source[-12:]]
+        raw_history = [{"role": msg.role, "content": msg.content} for msg in history_source[-16:]]
+
         user_message = (payload.message or "").strip()
         if not user_message:
-            # If caller sends full messages array, use the last user message as active prompt.
-            for item in reversed(history):
-                if item["role"] == "user":
-                    user_message = item["content"]
+            for item in reversed(raw_history):
+                if (item.get("role") or "").lower() == "user":
+                    user_message = (item.get("content") or "").strip()
                     break
         if not user_message:
             return LeadChatResponse(response="Ask a question and I will generate a lead-specific response.")
 
-        logger.info(
-            "Lead chat request payload: %s",
-            payload.model_dump(by_alias=True),
-        )
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    "You are a practical SaaS sales assistant. Be concise, tactical, and specific. "
-                    "Always aim to help close this lead."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Lead: {context.name}\n"
-                    f"Type: {context.business_type}\n"
-                    f"Rating: {context.rating if context.rating is not None else 'unknown'}\n"
-                    f"Reviews: {' | '.join(context.reviews[:4]) if context.reviews else 'none'}\n"
-                    f"Website notes: {context.website_content or 'none'}\n"
-                    f"Current overview: {context.overview or 'none'}\n"
-                    f"Recommended offer: {context.what_to_sell or 'unknown'}"
-                ),
-            },
-            *history,
-            {"role": "user", "content": user_message},
+        logger.info("Lead chat request payload: %s", payload.model_dump(by_alias=True))
+
+        system_prompt = self._build_chat_system_prompt(context)
+        openai_history = self._history_to_openai_messages(raw_history)
+        openai_messages: list[dict[str, str]] = [
+            {"role": "system", "content": system_prompt},
+            *openai_history,
         ]
-        openai_answer = await self._chat_openai(messages)
+
+        openai_answer = await self._chat_openai(openai_messages)
         if openai_answer:
-            print("Using OpenAI")
-            logger.info("Lead chat response from OpenAI: %s", openai_answer)
+            logger.info("Lead chat response from OpenAI (preview): %s...", openai_answer[:120])
             return LeadChatResponse(response=openai_answer)
 
-        gemini_answer = await self._chat_gemini(messages)
+        gemini_answer = await self._chat_gemini(system_prompt, openai_history, user_message)
         if gemini_answer:
-            print("Using Gemini")
-            logger.info("Lead chat response from Gemini: %s", gemini_answer)
+            logger.info("Lead chat response from Gemini (preview): %s...", gemini_answer[:120])
             return LeadChatResponse(response=gemini_answer)
 
-        print("Using fallback")
         logger.warning("Lead chat fallback triggered after provider failures.")
-        return LeadChatResponse(response=self._dynamic_chat_fallback(user_message, context.model_dump()))
+        return LeadChatResponse(
+            response=self._dynamic_chat_fallback(user_message, context.model_dump(by_alias=True))
+        )
 
-    async def _chat_openai(self, messages: list[dict]) -> str | None:
+    async def _chat_openai(self, messages: list[dict[str, str]]) -> str | None:
         if not self._settings.openai_api_key:
             logger.warning("OpenAI chat skipped: missing OPENAI_API_KEY")
             return None
         try:
-            async with httpx.AsyncClient(timeout=25) as client:
+            payload: dict[str, Any] = {
+                "model": self._settings.openai_model,
+                "messages": messages,
+                "temperature": 0.6,
+                "max_tokens": 1200,
+            }
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
                     headers={
                         "Authorization": f"Bearer {self._settings.openai_api_key}",
                         "Content-Type": "application/json",
                     },
-                    json={"model": self._settings.openai_model, "messages": messages},
+                    json=payload,
                 )
+                if response.status_code >= 400:
+                    logger.warning(
+                        "OpenAI chat HTTP %s: %s",
+                        response.status_code,
+                        response.text[:800],
+                    )
                 response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"]
+                data = response.json()
+                choice = (data.get("choices") or [{}])[0]
+                message = (choice.get("message") or {})
+                content = message.get("content")
+                if not content:
+                    logger.warning("OpenAI chat returned empty content: %s", data)
+                    return None
                 return str(content).strip()
         except Exception as exc:
             logger.warning("OpenAI chat failed, trying Gemini.", exc_info=exc)
             return None
 
-    async def _chat_gemini(self, messages: list[dict]) -> str | None:
+    async def _chat_gemini(
+        self,
+        system_prompt: str,
+        openai_history: list[dict[str, str]],
+        fallback_user_text: str,
+    ) -> str | None:
         if not self._settings.gemini_api_key:
             logger.warning("Gemini chat skipped: missing GEMINI_API_KEY")
             return None
         try:
-            conversation = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-            prompt = (
-                "You are a SaaS sales assistant. Respond with tactical, lead-specific advice.\n\n"
-                f"{conversation}"
-            )
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-            }
+            contents: list[dict[str, Any]] = []
+            for m in openai_history:
+                role = m["role"]
+                text = m["content"]
+                gemini_role = "model" if role == "assistant" else "user"
+                contents.append({"role": gemini_role, "parts": [{"text": text}]})
+
+            if not contents and fallback_user_text.strip():
+                contents = [{"role": "user", "parts": [{"text": fallback_user_text.strip()}]}]
+
             url = (
                 "https://generativelanguage.googleapis.com/v1beta/models/"
                 f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
             )
-            async with httpx.AsyncClient(timeout=25) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
-                return str(data["candidates"][0]["content"]["parts"][0]["text"]).strip()
+
+            async def _post(body: dict[str, Any]) -> httpx.Response:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    return await client.post(url, json=body)
+
+            body_primary: dict[str, Any] = {
+                "systemInstruction": {"parts": [{"text": system_prompt}]},
+                "contents": contents,
+                "generationConfig": {"temperature": 0.6, "maxOutputTokens": 1200},
+            }
+            response = await _post(body_primary)
+
+            if response.status_code >= 400:
+                logger.warning(
+                    "Gemini chat HTTP %s (with systemInstruction): %s",
+                    response.status_code,
+                    response.text[:800],
+                )
+                merged = f"{system_prompt}\n\nUser message:\n{fallback_user_text.strip()}"
+                body_fallback = {
+                    "contents": [{"role": "user", "parts": [{"text": merged}]}],
+                    "generationConfig": {"temperature": 0.6, "maxOutputTokens": 1200},
+                }
+                if contents:
+                    body_fallback["contents"] = [
+                        {"role": "user", "parts": [{"text": system_prompt}]},
+                        *contents,
+                    ]
+                response = await _post(body_fallback)
+                if response.status_code >= 400:
+                    logger.warning(
+                        "Gemini chat HTTP %s (fallback): %s",
+                        response.status_code,
+                        response.text[:800],
+                    )
+                    return None
+
+            response.raise_for_status()
+            data = response.json()
+            candidates = data.get("candidates") or []
+            if not candidates:
+                logger.warning("Gemini chat returned no candidates: %s", data)
+                return None
+            parts = ((candidates[0].get("content") or {}).get("parts")) or []
+            if not parts:
+                logger.warning("Gemini chat empty parts: %s", data)
+                return None
+            text = parts[0].get("text") or ""
+            return str(text).strip() or None
         except Exception as exc:
             logger.warning("Gemini chat failed, using fallback.", exc_info=exc)
             return None
 
-    def _dynamic_chat_fallback(self, message: str, lead_context: dict) -> str:
+    def _dynamic_chat_fallback(self, message: str, lead_context: dict[str, Any]) -> str:
+        """Rule-based reply when APIs fail; still answers email/phone using known fields."""
         lead_name = lead_context.get("name") or "this lead"
-        business_type = lead_context.get("business_type") or "business"
-        rating = lead_context.get("rating")
-        review_signal = "limited social proof" if not lead_context.get("reviews") else "existing customer feedback"
-        condition = (
-            f"rating {rating}" if rating is not None else "unknown rating"
+        email = (lead_context.get("email") or "").strip()
+        phone = (lead_context.get("phone_number") or lead_context.get("phoneNumber") or "").strip()
+        website = (lead_context.get("website") or "").strip()
+        business_type = (
+            lead_context.get("business_type") or lead_context.get("businessType") or "business"
         )
+        rating = lead_context.get("rating")
+        msg_lower = message.lower()
+
+        if any(k in msg_lower for k in ("email", "e-mail", "mail id", "mail address")):
+            if email:
+                return (
+                    f"For {lead_name}, the email we have on file is {email}. "
+                    "If this was auto-generated, verify it on their website or via a quick call before sending bulk mail."
+                )
+            return (
+                f"We don't have a verified email for {lead_name} in this export. "
+                f"Try their site ({website or 'search the business name'}) or call {phone or 'their listed phone if available'}."
+            )
+
+        if any(k in msg_lower for k in ("phone", "call", "whatsapp", "number")):
+            if phone:
+                return f"For {lead_name}, the phone number we have is {phone}."
+            return f"We don't have a phone number on file for {lead_name}. Check Google Maps or their website."
+
+        if "website" in msg_lower or "url" in msg_lower:
+            if website:
+                return f"Website: {website}"
+            return f"We don't have a website URL stored for {lead_name}. Search the business name to find it."
+
+        review_signal = "limited social proof" if not lead_context.get("reviews") else "existing customer feedback"
+        condition = f"rating {rating}" if rating is not None else "unknown rating"
         return (
-            f"I could not reach AI providers right now, so here is a contextual response for {lead_name} ({business_type}): "
-            f"anchor your answer to {review_signal} and {condition}. Start by addressing this question directly: '{message}'. "
-            "Then propose one immediate fix, one measurable KPI outcome, and a 10-minute audit call CTA."
+            f"(Offline mode) For {lead_name} ({business_type}): use {review_signal} and {condition}. "
+            f'Regarding your question: "{message}" — prioritize one concrete next step (e.g. audit call, offer, or follow-up) '
+            "based on the table data. Full AI chat is unavailable; check API keys and try again."
         )

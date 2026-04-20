@@ -42,6 +42,10 @@ class LeadContext(BaseModel):
     reviews: list[str] = Field(default_factory=list)
     overview: str | None = None
     what_to_sell: str | None = Field(default=None, alias="whatToSell")
+    outreach_angle: str | None = Field(default=None, alias="outreachAngle")
+    email: str | None = None
+    phone_number: str | None = Field(default=None, alias="phoneNumber")
+    website: str | None = None
 
 
 class LeadChatRequest(BaseModel):
