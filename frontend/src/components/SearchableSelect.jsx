@@ -11,14 +11,18 @@ function SearchableSelect({
   loading = false,
   showCategory = false,
   allowCustomValue = false,
+  debounceMs = 0,
+  suggestionResolver = null,
+  hint = "",
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const rootRef = useRef(null);
 
   const selectedLabel = useMemo(() => {
     const selected = options.find((option) => option.value === value);
-    return selected?.label || "";
+    return selected?.label || value || "";
   }, [options, value]);
 
   useEffect(() => {
@@ -26,6 +30,15 @@ function SearchableSelect({
       setQuery(selectedLabel);
     }
   }, [open, selectedLabel]);
+
+  useEffect(() => {
+    if (!debounceMs) {
+      setDebouncedQuery(query);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setDebouncedQuery(query), debounceMs);
+    return () => window.clearTimeout(timer);
+  }, [debounceMs, query]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -38,12 +51,15 @@ function SearchableSelect({
   }, []);
 
   const filteredOptions = useMemo(() => {
-    const keyword = query.trim().toLowerCase();
+    const keyword = debouncedQuery.trim().toLowerCase();
+    if (typeof suggestionResolver === "function") {
+      return suggestionResolver(keyword, options);
+    }
     if (!keyword) {
-      return options;
+      return options.slice(0, 30);
     }
     return options.filter((option) => option.label.toLowerCase().includes(keyword));
-  }, [options, query]);
+  }, [debouncedQuery, options, suggestionResolver]);
 
   const highlightMatch = useCallback(
     (text) => {
@@ -113,6 +129,7 @@ function SearchableSelect({
         aria-haspopup="listbox"
         className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition-colors duration-200 focus:ring-2 disabled:cursor-not-allowed disabled:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800"
       />
+      {hint ? <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">{hint}</p> : null}
 
       <div
         role="listbox"

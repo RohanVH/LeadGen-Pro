@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { searchLeads } from "../services/leadService";
+import { normalizeBusinessType } from "../utils/businessType";
 
 const DEFAULT_ERROR_MESSAGE = "Something went wrong. Please try again.";
 const PAGE_SIZE = 150;
@@ -74,13 +75,18 @@ export function useLeadSearch() {
     setLoading(true);
     setLoadingStage("Fetching leads...");
     setError("");
-    setQuery(nextQuery);
+    const normalizedType = normalizeBusinessType(nextQuery.type || "");
+    const effectiveQuery = {
+      ...nextQuery,
+      type: normalizedType || (nextQuery.type || "").trim(),
+    };
+    setQuery(effectiveQuery);
     const analysisTimer = window.setTimeout(() => {
       setLoadingStage("Analyzing businesses...");
     }, 1200);
 
     try {
-      const data = await searchLeads({ ...nextQuery, offset: 0, limit: PAGE_SIZE });
+      const data = await searchLeads({ ...effectiveQuery, offset: 0, limit: PAGE_SIZE });
       setLeads(data.leads ?? []);
       setTotal(data.total ?? 0);
       setOffset((data.leads ?? []).length);
