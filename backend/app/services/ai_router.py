@@ -6,8 +6,12 @@ import json
 import logging
 from typing import Any
 
-import httpx
 from app.core.config import Settings
+from app.services.llm_clients import (
+    gemini_generate_content_v1_sync,
+    openai_chat_completion_json_analyze_sync,
+    run_sync_with_ai_timeout,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +65,15 @@ class AIRouterService:
 
         openai_result = await self._try_openai(prompt)
         if openai_result is not None:
-            print("Using OpenAI")
             logger.info("AI analyze response from OpenAI: %s", openai_result)
             return self._normalize(openai_result, lead_input)
 
         gemini_result = await self._try_gemini(prompt)
         if gemini_result is not None:
-            print("Using Gemini")
             logger.info("AI analyze response from Gemini: %s", gemini_result)
             return self._normalize(gemini_result, lead_input)
 
-        print("Using fallback")
+        print("Fallback triggered")
         logger.warning("AI analyze fallback triggered after provider failures.")
         return self._normalize(self._rule_based_fallback(lead_input), lead_input)
 
@@ -84,74 +86,65 @@ class AIRouterService:
             logger.warning("OpenAI skipped: missing OPENAI_API_KEY")
             return None
         try:
-            payload = {
-                "model": self._settings.openai_model,
-                "temperature": 0.35,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {"role": "system", "content": _ANALYSIS_SYSTEM},
-                    {"role": "user", "content": prompt},
-                ],
-            }
-            async with httpx.AsyncClient(timeout=55) as client:
-                response = await client.post(
-                    f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self._settings.openai_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                )
-                response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"]
-                parsed = _parse_json_object_from_text(content)
-                if parsed is None:
-                    logger.warning("OpenAI returned non-object JSON; trying Gemini.")
-                    return None
-                return parsed
+            raw = await run_sync_with_ai_timeout(
+                openai_chat_completion_json_analyze_sync,
+                self._settings,
+                _ANALYSIS_SYSTEM,
+                prompt,
+            )
         except Exception as exc:
-            logger.warning("OpenAI provider failed, trying Gemini.", exc_info=exc)
+            logger.error("AI OPENAI ANALYZE ERROR: %s", exc, exc_info=True)
+            print("AI ERROR:", str(exc))
             return None
+        parsed = _parse_json_object_from_text(raw)
+        if parsed is None:
+            logger.warning("OpenAI returned non-object JSON; trying Gemini.")
+            return None
+        return parsed
 
     async def _try_gemini(self, prompt: str) -> dict[str, Any] | None:
         if not self._settings.gemini_api_key:
             logger.warning("Gemini skipped: missing GEMINI_API_KEY")
             return None
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
-        )
-        payload_primary = {
-            "systemInstruction": {"parts": [{"text": _ANALYSIS_SYSTEM}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"response_mime_type": "application/json", "temperature": 0.35},
-        }
-        payload_flat = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": f"{_ANALYSIS_SYSTEM}\n\n---\n\n{prompt}"}],
-                }
-            ],
-            "generationConfig": {"response_mime_type": "application/json", "temperature": 0.35},
-        }
-        try:
-            async with httpx.AsyncClient(timeout=55) as client:
-                response = await client.post(url, json=payload_primary)
-                if response.status_code >= 400:
-                    logger.warning("Gemini analyze HTTP %s; retrying without systemInstruction.", response.status_code)
-                    response = await client.post(url, json=payload_flat)
-                response.raise_for_status()
-                data = response.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = _parse_json_object_from_text(text)
-                if parsed is None:
-                    logger.warning("Gemini returned non-object JSON; using fallback.")
-                    return None
-                return parsed
-        except Exception as exc:
-            logger.warning("Gemini provider failed, using fallback.", exc_info=exc)
-            return None
+        combined = f"{_ANALYSIS_SYSTEM}\n\n---\n\n{prompt}"
+        api_key = self._settings.gemini_api_key
+        models_order: list[str] = []
+        seen: set[str] = set()
+        for mid in (self._settings.gemini_model, "gemini-1.5-flash"):
+            m = (mid or "").strip()
+            if m and m not in seen:
+                seen.add(m)
+                models_order.append(m)
+
+        for model_id in models_order:
+            for use_json in (True, False):
+                try:
+                    raw = await run_sync_with_ai_timeout(
+                        gemini_generate_content_v1_sync,
+                        api_key,
+                        model_id,
+                        combined,
+                        response_mime_json=use_json,
+                    )
+                except Exception as exc:
+                    logger.error(
+                        "AI GEMINI ANALYZE ERROR model=%s json_mode=%s: %s",
+                        model_id,
+                        use_json,
+                        exc,
+                        exc_info=True,
+                    )
+                    print("AI ERROR:", str(exc))
+                    continue
+                parsed = _parse_json_object_from_text(raw)
+                if parsed is not None:
+                    return parsed
+                logger.warning(
+                    "Gemini returned non-object JSON model=%s json_mode=%s",
+                    model_id,
+                    use_json,
+                )
+        return None
 
     def _build_prompt(self, lead_input: dict[str, Any]) -> str:
         name = lead_input.get("name") or "Unknown business"
