@@ -1,233 +1,192 @@
 # LeadGen Pro
 
-LeadGen Pro is a production-ready SaaS MVP for global lead generation and client acquisition for web/app development agencies.
+### AI-Powered Client Acquisition Platform
 
-## Tech Stack
+![React](https://img.shields.io/badge/Frontend-React-61DAFB?logo=react&logoColor=black)
+![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)
+![OpenAI](https://img.shields.io/badge/AI-OpenAI-412991?logo=openai&logoColor=white)
+![Gemini](https://img.shields.io/badge/AI-Gemini-4285F4?logo=google&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Active%20Development-22c55e)
+![License](https://img.shields.io/badge/License-See%20LICENSE-lightgrey)
 
-- Backend: FastAPI, Pydantic, async `httpx`, `requests`, `BeautifulSoup`
-- Frontend: React (Vite), Tailwind CSS
-- External API: Google Places API (Text Search + Details)
+---
 
-## Project Structure
+## 🚀 Overview
 
-```text
-backend/
-  app/
-    main.py
-    api/
-    services/
-    models/
-    schemas/
-    core/
-    utils/
-frontend/
-  src/
-    components/
-    pages/
-    services/
-    hooks/
-    layouts/
+- Discover businesses globally with guided, intelligent search.
+- Enrich every lead with contact, website, reviews, and social presence.
+- Analyze each lead using AI to uncover needs, risks, and sales opportunities.
+- Generate actionable recommendations so teams close clients faster.
+
+---
+
+## 🎯 Why This Project
+
+Manual lead generation is slow, repetitive, and inconsistent.  
+Cold outreach without context leads to poor conversion.
+
+**LeadGen Pro solves this with AI-first lead intelligence.**
+
+- Smart enrichment and prioritization
+- Dynamic AI insights and chat assistance
+- Targeted outreach guidance per business
+
+---
+
+## ✨ Features
+
+### 🔍 Lead Discovery
+- Global city + country search with category and business subtype flow
+- Dynamic subtype suggestions with manual override support
+- Smart pagination with load more + auto-load on scroll
+- Duplicate prevention and location-aware filtering
+
+### 🧠 AI Business Intelligence
+- AI-generated business summary, strengths, weaknesses, and sentiment
+- Outreach recommendation (`contact`/`skip`) and pitch suggestion
+- On-demand lead analysis per row from the table
+- Real-time fallback routing to keep insights available
+
+### 💬 AI Assistant
+- Per-lead modal assistant for interactive Q&A
+- Conversation-aware responses using lead context
+- Live thinking/loading states for smooth UX
+- Designed for sales objections, positioning, and close strategy
+
+### 📊 Data Enrichment
+- Website content extraction and quality assessment
+- Email discovery with source and confidence scoring
+- Google rating/review ingestion
+- Instagram and YouTube discovery support
+
+### 🔁 AI Router (OpenAI + Gemini)
+- Primary provider: OpenAI
+- Secondary provider: Gemini
+- Rule-based fallback if providers fail
+- Normalized output format across providers
+
+### 📈 Pagination System
+- Offset/limit backend pagination with `hasMore`
+- Frontend lead accumulation without replacing existing data
+- Loaded progress visibility (`Loaded X / Y leads`)
+- Stable filters and UI state while appending data
+
+---
+
+## 🖼️ Demo / Screenshots
+
+![Dashboard Screenshot](./assets/dashboard.png)
+
+---
+
+## 🏗️ Tech Stack
+
+### Frontend
+![React](https://img.shields.io/badge/React-20232A?logo=react)
+![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-06B6D4?logo=tailwindcss&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
+
+### Backend
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Pydantic](https://img.shields.io/badge/Pydantic-E92063?logo=pydantic&logoColor=white)
+
+### AI
+![OpenAI](https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini-4285F4?logo=google&logoColor=white)
+
+### Deployment
+![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white)
+
+---
+
+## ⚙️ Setup
+
+### 1) Clone
+```bash
+git clone <your-repo-url>
+cd "LeadGen Pro"
 ```
 
-## Backend Setup
-
-1. Create and activate a virtual environment.
-2. Install dependencies:
-
+### 2) Backend
 ```bash
 cd backend
 pip install -r requirements.txt
-```
-
-3. Configure environment variables:
-
-```bash
 cp .env.example .env
-```
-
-Set `GOOGLE_API_KEY` or `GOOGLE_PLACES_API_KEY` in `backend/.env`.
-
-4. Run backend server:
-
-```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Backend URLs:
-- API Docs: `http://localhost:8000/docs`
-- Health: `http://localhost:8000/health`
-
-## Frontend Setup
-
-1. Install dependencies:
-
+### 3) Frontend
 ```bash
 cd frontend
 npm install
-```
-
-2. Configure environment:
-
-```bash
 cp .env.example .env
-```
-
-3. Run frontend:
-
-```bash
 npm run dev
 ```
 
-Frontend URL:
-- App: `http://localhost:5173`
+---
 
-Frontend API behavior:
-- Local development defaults to `http://localhost:8000`
-- Production defaults to relative `/api` calls, which is Vercel-friendly
+## 🔐 Env Variables
 
-## API Endpoints
+```env
+# Core
+APP_ENV=development
+FRONTEND_ORIGIN=http://localhost:5173
 
-- `GET /leads/search?city=<city>&type=<businessType>&country=<optionalCountry>`
-- `GET /leads/export?city=<city>&type=<businessType>&country=<optionalCountry>`
+# Data Providers
+GOOGLE_PLACES_API_KEY=your_google_key
+GEODB_API_KEY=your_geodb_key
 
-## Vercel Deployment
+# AI Providers
+OPENAI_API_KEY=your_openai_key
+OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=your_gemini_key
+GEMINI_MODEL=gemini-1.5-flash
 
-LeadGen Pro is configured so the frontend deploys as a Vite static site and the FastAPI backend runs as a Vercel Python serverless function.
-
-### Deployment Structure
-
-```text
-api/
-  index.py            # Vercel serverless FastAPI entrypoint
-backend/
-  app/
-    main.py           # Existing FastAPI application
-frontend/
-  dist/               # Vite production build output
-vercel.json           # Vercel build + routing config
-package.json          # Root build script for frontend
-requirements.txt      # Root Python deps for Vercel
+# AI & Scraping
+AI_MAX_LEADS=12
+AI_BATCH_SIZE=4
+SCRAPER_TIMEOUT_SECONDS=6
+SCRAPER_MAX_CONCURRENCY=6
 ```
 
-### Files Added for Vercel
+---
 
-- `api/index.py`
-  - imports the existing FastAPI app from `backend/app/main.py`
-  - exposes the top-level `app` ASGI instance for Vercel's Python runtime
-- `vercel.json`
-  - builds the frontend from `frontend/`
-  - lets Vercel serve Python functions from `api/` using its native routing
-- `requirements.txt`
-  - mirrors the backend Python dependencies for Vercel builds
-- `.python-version`
-  - pins Python 3.12 so local and Vercel runtimes stay aligned
+## 🧠 How It Works
 
-### Local Verification Before Deploy
+**Search -> Fetch -> Enrich -> Analyze -> Recommend -> Contact**
 
-1. Build the frontend:
+1. User searches by category, subtype, and location.
+2. System fetches business candidates from external data sources.
+3. Pipeline enriches leads with website, email, reviews, and social data.
+4. AI analyzes each lead to identify opportunities and risks.
+5. Platform recommends what to sell and whether to contact.
+6. Team launches outreach with smarter context and better timing.
 
-```bash
-cd frontend
-npm install
-npm run build
-```
+---
 
-2. Run the backend:
+## 💰 Use Cases
 
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+- **Freelancers** who need qualified leads without manual prospecting.
+- **Agencies** that want AI-driven targeting and pitch precision.
+- **Sales teams** seeking conversion-focused outbound workflows.
 
-### Vercel Environment Variables
+---
 
-Set these in the Vercel dashboard for the project:
+## 🛣️ Roadmap
 
-- `GOOGLE_API_KEY` or `GOOGLE_PLACES_API_KEY`
-- `OPENAI_API_KEY`
-- `FRONTEND_ORIGIN`
-- `LEAD_MAX_RESULTS`
-- `SCRAPER_TIMEOUT_SECONDS`
-- `EMAIL_HOST`
-- `EMAIL_PORT`
-- `EMAIL_USER`
-- `EMAIL_PASS`
-- `GEODB_API_KEY`
-- `GEODB_API_HOST`
-- `GEODB_COUNTRIES_URL`
-- `GEODB_CITIES_URL`
+- [ ] CRM system
+- [ ] Outreach automation
+- [ ] Multi-user support
 
-Notes:
-- Use `FRONTEND_ORIGIN=https://lead-gen-pro-mu.vercel.app`
-- `OPENAI_API_KEY` is safe to configure now even though the current app does not yet require it at runtime
-- Keep `LEAD_MAX_RESULTS` between `10` and `15` for Vercel-friendly response times
-- Set `SCRAPER_TIMEOUT_SECONDS=5` to keep scraping under serverless limits
-- Enable "Automatically expose System Environment Variables" so preview and production URLs are added to the CORS allowlist automatically
+---
 
-### Deploy to Vercel
+## 👤 Author
 
-1. Push the repo to GitHub.
-2. Import the repository into Vercel.
-3. Keep the project root as the repository root.
-4. Vercel will:
-   - run `npm install --prefix frontend`
-   - run the root `build` script
-   - publish `frontend/dist`
-   - deploy `api/index.py` as a Python serverless function
-5. Add the environment variables in the Vercel dashboard.
-6. Redeploy after saving env vars.
+**Rohan**
 
-### Production Request Paths
+---
 
-Frontend requests are Vercel-safe and use:
+## ⚡ Final Note
 
-- `/api/leads/search`
-- `/api/leads/export`
-- `/api/locations/autocomplete`
-- `/api/locations/popular`
-- `/api/locations/details`
-- `/api/outreach/send-email`
-
-### Important Serverless Notes
-
-- Website scraping and enrichment should stay fast; keep request timeouts low.
-- Avoid long-running tasks in request/response cycles.
-- `/health` is exposed directly in local development and under `/api/health` on Vercel.
-- If AI or bulk enrichment becomes heavier later, move that work to a queue/background job system.
-
-## Core Business Rules
-
-- Email extraction is attempted from:
-  - website homepage
-  - `/contact`
-  - `/about`
-- Priority score:
-  - `HIGH`: missing website OR missing phone OR missing email
-  - `MEDIUM`: weak website (missing title/meta tags)
-  - `LOW`: website + phone + email are all available
-- Data quality:
-  - duplicate businesses are removed
-  - city/country mismatch results are filtered
-
-## Frontend Dashboard
-
-- Premium SaaS table layout with:
-  - Email column
-  - Priority badges (`HIGH`, `MEDIUM`, `LOW`)
-  - loading spinner
-- Filters:
-  - High Priority
-  - Has Email
-  - No Website
-- KPI cards:
-  - Total Leads
-  - High Priority Leads
-  - Emails Found
-
-## Scalability Hooks
-
-- `app/services/analyzer.py` is included as a placeholder for:
-  - AI lead analysis
-  - lead scoring
-  - CRM enrichment
+**This is not just a tool — it's a client acquisition engine.**
