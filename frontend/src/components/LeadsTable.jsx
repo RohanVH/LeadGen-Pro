@@ -35,6 +35,27 @@ function WebsiteQualityBadge({ value }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{label}</span>;
 }
 
+function EmailConfidenceBadge({ value }) {
+  const className =
+    value === "HIGH"
+      ? "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200"
+      : value === "MEDIUM"
+        ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+        : "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600";
+
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{value}</span>;
+}
+
+function formatEmailType(value) {
+  if (!value || value === "missing") {
+    return "-";
+  }
+  if (value === "generated") {
+    return "Generated";
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
 function Toast({ toast }) {
   if (!toast) {
     return null;
@@ -170,6 +191,8 @@ function LeadsTable({ leads, loading, loadingStage }) {
                 <th className="px-4 py-3">Website</th>
                 <th className="px-4 py-3">Website Quality</th>
                 <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Confidence</th>
                 <th className="px-4 py-3">Priority</th>
                 <th className="px-4 py-3">Actions</th>
               </tr>
@@ -218,15 +241,24 @@ function LeadsTable({ leads, loading, loadingStage }) {
                   </td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                     {lead.email ? (
-                      <a
-                        href={`mailto:${lead.email}`}
-                        className="font-semibold text-indigo-600 underline-offset-2 transition-colors duration-200 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
-                      >
-                        {lead.email}
-                      </a>
+                      <div className="flex flex-col gap-1">
+                        <a
+                          href={`mailto:${lead.email}`}
+                          className="font-semibold text-indigo-600 underline-offset-2 transition-colors duration-200 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
+                        >
+                          {lead.email}
+                        </a>
+                        {lead.emailType === "generated" ? (
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">Fallback generated email</span>
+                        ) : null}
+                      </div>
                     ) : (
                       "-"
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{formatEmailType(lead.emailType)}</td>
+                  <td className="px-4 py-3">
+                    <EmailConfidenceBadge value={lead.emailConfidence || "LOW"} />
                   </td>
                   <td className="px-4 py-3">
                     <PriorityBadge value={lead.priorityScore} />

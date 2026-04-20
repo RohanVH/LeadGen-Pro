@@ -86,11 +86,16 @@ class LeadService:
         phone_number = details.get("formatted_phone_number")
 
         email: str | None = None
+        email_type = "missing"
+        email_confidence = "LOW"
         weak_website = False
         website_quality = "NO_WEBSITE"
         if website:
             async with semaphore:
-                email = await self._email_scraper_service.extract_email(website)
+                email_enrichment = await self._email_scraper_service.enrich_email(website)
+                email = email_enrichment.email
+                email_type = email_enrichment.email_type
+                email_confidence = email_enrichment.email_confidence
                 website_quality = await self._website_analyzer_service.analyze_website(website)
                 weak_website = website_quality == "WEAK_WEBSITE"
 
@@ -100,22 +105,43 @@ class LeadService:
             phone_number=phone_number,
             website=website,
             email=email,
+            email_type=email_type,
+            email_confidence=email_confidence,
             city=city,
             business_type=business_type,
             priority_score=self._compute_priority_score(
                 website=website,
                 phone_number=phone_number,
-                email=email,
+                email=self._trusted_email_value(
+                    email=email,
+                    email_type=email_type,
+                    email_confidence=email_confidence,
+                ),
                 weak_website=weak_website,
             ),
             is_hot_lead=self._is_hot_lead(
                 website=website,
                 phone_number=phone_number,
-                email=email,
+                email=self._trusted_email_value(
+                    email=email,
+                    email_type=email_type,
+                    email_confidence=email_confidence,
+                ),
             ),
             website_quality=website_quality,
         )
         return lead
+
+    def _trusted_email_value(
+        self,
+        email: str | None,
+        email_type: str,
+        email_confidence: str,
+    ) -> str | None:
+        """Treat generated low-confidence emails as enrichment hints, not verified contacts."""
+        if email_type == "generated" and email_confidence == "LOW":
+            return None
+        return email
 
     def _compute_priority_score(
         self,

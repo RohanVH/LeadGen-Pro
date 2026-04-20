@@ -15,6 +15,11 @@ class Lead(BaseModel):
     phone_number: str | None = Field(default=None, alias="phoneNumber")
     website: str | None = None
     email: str | None = None
+    email_type: Literal["owner", "founder", "name", "info", "contact", "hello", "generated", "missing"] = Field(
+        default="missing",
+        alias="emailType",
+    )
+    email_confidence: Literal["HIGH", "MEDIUM", "LOW"] = Field(default="LOW", alias="emailConfidence")
     city: str | None = None
     business_type: str | None = Field(default=None, alias="businessType")
     priority_score: Literal["HIGH", "MEDIUM", "LOW"] = Field(alias="priorityScore")
