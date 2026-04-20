@@ -32,24 +32,25 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    application.include_router(api_router, prefix="/v1")
+    application.include_router(api_router)
 
-@application.get("/health", tags=["health"])
-async def health() -> dict[str, str]:
-    """Health endpoint for monitoring and readiness checks."""
-    return {"status": "ok"}
+    @application.get("/health", tags=["health"])
+    async def health() -> dict[str, str]:
+        """Health endpoint for monitoring and readiness checks."""
+        return {"status": "ok"}
 
-@application.get("/v1/test")
-def test():
-    return {"status": "working"}
+    @application.get("/test")
+    def test():
+        return {"status": "working"}
+
+    @application.get("/debug")
+    def debug():
+        settings = get_settings()
+        return {
+            "google_key_exists": bool(settings.google_places_api_key)
+        }
 
     return application
-@application.get("/v1/debug")
-def debug():
-    from app.core.config import settings
-    return {
-        "google_key_exists": bool(settings.GOOGLE_API_KEY)
-    }
 
 
 app = create_app()

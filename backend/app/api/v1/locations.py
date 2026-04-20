@@ -91,7 +91,7 @@ async def location_details(
     places_service: GooglePlacesService = Depends(get_google_places_service),
 ) -> SelectedLocation:
     """Return normalized location details for a chosen suggestion."""
-    result = await places_service.get_location_details(place_id=place_id)
+    result = places_service.get_location_details(place_id=place_id)
     components = result.get("address_components", [])
 
     def find_component(*types: str) -> str | None:

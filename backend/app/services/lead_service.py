@@ -40,7 +40,7 @@ class LeadService:
         location_suffix = f", {country}" if country else ""
         query = f"{business_type} in {city}{location_suffix}"
 
-        places = await self._places_service.search_businesses(query=query)
+        places = self._places_service.search_businesses(query=query)
         filtered_places = self._filter_relevant_places(
             places=places,
             city=city,
@@ -78,7 +78,7 @@ class LeadService:
         semaphore: asyncio.Semaphore,
     ) -> Lead | None:
         place_id = place.get("place_id")
-        details = await self._places_service.get_place_details(place_id=place_id) if place_id else {}
+        details = self._places_service.get_place_details(place_id=place_id) if place_id else {}
         if place_id and not details:
             logger.info("Proceeding without place details for place_id '%s'.", place_id)
 
