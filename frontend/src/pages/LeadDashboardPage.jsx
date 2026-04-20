@@ -18,8 +18,8 @@ function LeadDashboardPage() {
     loadingMore,
     loadingStage,
     error,
-    filter,
-    setFilter,
+    activeFilters,
+    toggleFilter,
     hotLeadsOnly,
     setHotLeadsOnly,
     submitSearch,
@@ -87,8 +87,8 @@ function LeadDashboardPage() {
       >
         <div className="flex flex-col gap-4 rounded-2xl border border-slate-200/80 bg-white/70 p-4 shadow-card backdrop-blur-sm dark:border-slate-700/80 dark:bg-slate-900/60 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <LeadFilters
-            filter={filter}
-            onChange={setFilter}
+            activeFilters={activeFilters}
+            onToggleFilter={toggleFilter}
             hotLeadsOnly={hotLeadsOnly}
             onToggleHotLeads={setHotLeadsOnly}
           />

@@ -1,7 +1,8 @@
 import { useId } from "react";
 
-function LeadFilters({ filter, onChange, hotLeadsOnly, onToggleHotLeads }) {
+function LeadFilters({ activeFilters = [], onToggleFilter, hotLeadsOnly, onToggleHotLeads }) {
   const hotToggleLabelId = `${useId()}-hot-only-label`;
+  const allSelected = activeFilters.length === 0;
   const items = [
     { label: "All Leads", value: "all" },
     { label: "High Priority", value: "high-priority" },
@@ -24,20 +25,25 @@ function LeadFilters({ filter, onChange, hotLeadsOnly, onToggleHotLeads }) {
         <span className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">View</span>
       </div>
       <div className="flex flex-wrap gap-2">
-        {items.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => onChange(item.value)}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 ${
-              filter === item.value
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-500/30 ring-offset-2 ring-offset-white dark:ring-offset-slate-900"
-                : "bg-white/90 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 hover:ring-slate-300 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-600 dark:hover:bg-slate-700"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
+        {items.map((item) => {
+          const isAll = item.value === "all";
+          const selected = isAll ? allSelected : activeFilters.includes(item.value);
+          return (
+            <button
+              key={item.value}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onToggleFilter(item.value)}
+              className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 ${
+                selected
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/25 ring-2 ring-indigo-500/30 ring-offset-2 ring-offset-white dark:ring-offset-slate-900"
+                  : "bg-white/90 text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 hover:ring-slate-300 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-600 dark:hover:bg-slate-700"
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
       <div

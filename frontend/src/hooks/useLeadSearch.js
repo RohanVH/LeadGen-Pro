@@ -1,9 +1,18 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { searchLeads } from "../services/leadService";
 import { normalizeBusinessType } from "../utils/businessType";
 
 const DEFAULT_ERROR_MESSAGE = "Something went wrong. Please try again.";
 const PAGE_SIZE = 150;
+
+/** Filter ids (multi-select, AND). Empty array = show all leads. */
+const FILTER_PREDICATES = {
+  "high-priority": (lead) => lead.priorityScore === "HIGH",
+  "has-email": (lead) => Boolean(lead.email),
+  "no-website": (lead) => lead.websiteQuality === "NO_WEBSITE",
+  "weak-website": (lead) => lead.websiteQuality === "WEAK_WEBSITE",
+  "good-website": (lead) => lead.websiteQuality === "GOOD_WEBSITE",
+};
 
 export function useLeadSearch() {
   const [query, setQuery] = useState({ city: "", type: "", country: "" });
@@ -15,27 +24,36 @@ export function useLeadSearch() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadingStage, setLoadingStage] = useState("");
   const [error, setError] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [activeFilters, setActiveFilters] = useState([]);
   const [hotLeadsOnly, setHotLeadsOnly] = useState(false);
 
+  const toggleFilter = useCallback((key) => {
+    if (key === "all") {
+      setActiveFilters([]);
+      return;
+    }
+    setActiveFilters((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return [...next].sort();
+    });
+  }, []);
+
   const baseFilteredLeads = useMemo(() => {
-    if (filter === "no-website") {
-      return leads.filter((lead) => lead.websiteQuality === "NO_WEBSITE");
+    if (!activeFilters.length) {
+      return leads;
     }
-    if (filter === "weak-website") {
-      return leads.filter((lead) => lead.websiteQuality === "WEAK_WEBSITE");
-    }
-    if (filter === "good-website") {
-      return leads.filter((lead) => lead.websiteQuality === "GOOD_WEBSITE");
-    }
-    if (filter === "high-priority") {
-      return leads.filter((lead) => lead.priorityScore === "HIGH");
-    }
-    if (filter === "has-email") {
-      return leads.filter((lead) => Boolean(lead.email));
-    }
-    return leads;
-  }, [leads, filter]);
+    return leads.filter((lead) =>
+      activeFilters.every((id) => {
+        const fn = FILTER_PREDICATES[id];
+        return fn ? fn(lead) : true;
+      })
+    );
+  }, [leads, activeFilters]);
 
   const filteredLeads = useMemo(() => {
     if (!hotLeadsOnly) {
@@ -139,8 +157,8 @@ export function useLeadSearch() {
     loading,
     loadingStage,
     error,
-    filter,
-    setFilter,
+    activeFilters,
+    toggleFilter,
     hotLeadsOnly,
     setHotLeadsOnly,
     submitSearch,
