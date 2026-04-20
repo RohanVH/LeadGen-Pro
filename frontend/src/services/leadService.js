@@ -88,6 +88,16 @@ export async function chatWithLeadAssistant(payload) {
   });
 }
 
+export async function suggestBusinessTypes(payload) {
+  return apiRequest("/v1/business-types/suggest", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchLocationSuggestions({ query, country }) {
   const searchParams = new URLSearchParams();
   searchParams.set("q", query);

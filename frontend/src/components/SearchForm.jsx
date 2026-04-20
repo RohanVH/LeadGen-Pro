@@ -4,6 +4,7 @@ import CountrySelect from "./CountrySelect";
 import LocationDropdown from "./LocationDropdown";
 
 const initialForm = {
+  category: "",
   city: "",
   type: "",
   country: "",
@@ -16,6 +17,14 @@ const initialForm = {
 
 function SearchForm({ onSearch, loading, loadingStage }) {
   const [form, setForm] = useState(initialForm);
+
+  const setCategory = useCallback((category) => {
+    setForm((prev) => ({
+      ...prev,
+      category,
+      type: "",
+    }));
+  }, []);
 
   const setType = useCallback((type) => {
     setForm((prev) => ({ ...prev, type }));
@@ -66,8 +75,8 @@ function SearchForm({ onSearch, loading, loadingStage }) {
   };
 
   const canSearch = useMemo(() => {
-    return Boolean(form.type && form.country && form.city) && !loading;
-  }, [form.type, form.country, form.city, loading]);
+    return Boolean(form.category && form.type && form.country && form.city) && !loading;
+  }, [form.category, form.type, form.country, form.city, loading]);
 
   return (
     <form
@@ -97,15 +106,20 @@ function SearchForm({ onSearch, loading, loadingStage }) {
         </div>
       </div>
 
-      <div className="sm:col-span-3">
-        <BusinessTypeSelect value={form.type} onChange={setType} />
+      <div className="sm:col-span-5">
+        <BusinessTypeSelect
+          category={form.category}
+          onCategoryChange={setCategory}
+          value={form.type}
+          onChange={setType}
+        />
       </div>
 
-      <div className="sm:col-span-3">
+      <div className="sm:col-span-2">
         <CountrySelect value={form.country} onChange={setCountry} />
       </div>
 
-      <div className="sm:col-span-5">
+      <div className="sm:col-span-4">
         <LocationDropdown
           country={form.country}
           value={

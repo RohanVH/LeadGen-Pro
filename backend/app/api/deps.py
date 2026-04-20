@@ -2,6 +2,7 @@
 
 from app.core.config import get_settings
 from app.services.analyzer import LeadAnalyzerService
+from app.services.business_type_suggester import BusinessTypeSuggesterService
 from app.services.email_sender import EmailSenderService
 from app.services.email_scraper import EmailScraperService
 from app.services.google_places import GooglePlacesService
@@ -52,3 +53,9 @@ def get_lead_ai_assistant_service() -> LeadAIAssistantService:
     """Build lead AI assistant service for per-lead analysis/chat endpoints."""
     settings = get_settings()
     return LeadAIAssistantService(settings=settings)
+
+
+def get_business_type_suggester_service() -> BusinessTypeSuggesterService:
+    """Build Gemini-based business type suggestion service."""
+    settings = get_settings()
+    return BusinessTypeSuggesterService(settings=settings)
