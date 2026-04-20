@@ -1,8 +1,6 @@
 """Interactive AI assistant for per-lead analysis and follow-up chat."""
 
 from __future__ import annotations
-
-import json
 import logging
 
 import httpx
@@ -13,6 +11,7 @@ from app.schemas.lead_ai import (
     LeadChatRequest,
     LeadChatResponse,
 )
+from app.services.ai_router import AIRouterService
 
 logger = logging.getLogger(__name__)
 
@@ -22,46 +21,60 @@ class LeadAIAssistantService:
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._ai_router = AIRouterService(settings=settings)
 
     async def analyze(self, payload: LeadAnalyzeRequest) -> LeadAnalyzeResponse:
         """Generate a structured analysis for a lead."""
-        if not self._settings.openai_api_key:
-            return self._fallback_analysis(payload.business_type)
-
-        try:
-            async with httpx.AsyncClient(timeout=25) as client:
-                response = await client.post(
-                    f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self._settings.openai_api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=self._analyze_prompt(payload),
-                )
-                response.raise_for_status()
-                content = response.json()["choices"][0]["message"]["content"]
-                data = json.loads(content)
-                return LeadAnalyzeResponse(
-                    overview=str(data.get("overview") or ""),
-                    strengths=[str(item) for item in (data.get("strengths") or [])][:4],
-                    weaknesses=[str(item) for item in (data.get("weaknesses") or [])][:4],
-                    customer_perception=str(data.get("customer_perception") or "neutral"),
-                    opportunities=[str(item) for item in (data.get("opportunities") or [])][:4],
-                    what_to_sell=str(data.get("what_to_sell") or ""),
-                    outreach_angle=str(data.get("outreach_angle") or ""),
-                )
-        except Exception as exc:
-            logger.warning("Lead AI analyze failed, using fallback.", exc_info=exc)
-            return self._fallback_analysis(payload.business_type)
+        logger.info("Lead analyze request payload: %s", payload.model_dump(by_alias=True))
+        normalized = await self._ai_router.analyze_business(
+            {
+                "name": payload.name,
+                "business_type": payload.business_type,
+                "website_content": payload.website_content,
+                "rating": payload.rating,
+                "review_count": len(payload.reviews),
+                "google_reviews": payload.reviews,
+            }
+        )
+        logger.info("Lead analyze normalized AI response: %s", normalized)
+        return LeadAnalyzeResponse(
+            overview=str(normalized.get("summary") or ""),
+            strengths=[str(item) for item in (normalized.get("pros") or [])][:4],
+            weaknesses=[str(item) for item in (normalized.get("cons") or [])][:4],
+            customer_perception=str(normalized.get("sentiment") or "neutral"),
+            opportunities=[
+                f"Prioritize outreach because action is '{normalized.get('action', 'contact')}'.",
+                f"Lead with this offer: {normalized.get('pitch', 'digital growth package')}.",
+            ],
+            what_to_sell=str(normalized.get("pitch") or "digital growth package"),
+            outreach_angle=(
+                f"Reference '{normalized.get('summary', 'their business context')}' and propose "
+                f"{normalized.get('pitch', 'a focused conversion upgrade')} in a short audit call."
+            ),
+        )
 
     async def chat(self, payload: LeadChatRequest) -> LeadChatResponse:
         """Continue a contextual conversation for a specific lead."""
-        if not self._settings.openai_api_key:
-            return LeadChatResponse(
-                response=self._fallback_chat(payload.message, payload.lead_context.business_type),
-            )
+        context = payload.lead_context or payload.lead
+        if context is None:
+            return LeadChatResponse(response="Please provide lead context so I can give a targeted answer.")
 
-        history = [{"role": msg.role, "content": msg.content} for msg in payload.previous_conversation[-10:]]
+        history_source = payload.messages or payload.previous_conversation
+        history = [{"role": msg.role, "content": msg.content} for msg in history_source[-12:]]
+        user_message = (payload.message or "").strip()
+        if not user_message:
+            # If caller sends full messages array, use the last user message as active prompt.
+            for item in reversed(history):
+                if item["role"] == "user":
+                    user_message = item["content"]
+                    break
+        if not user_message:
+            return LeadChatResponse(response="Ask a question and I will generate a lead-specific response.")
+
+        logger.info(
+            "Lead chat request payload: %s",
+            payload.model_dump(by_alias=True),
+        )
         messages = [
             {
                 "role": "system",
@@ -73,18 +86,38 @@ class LeadAIAssistantService:
             {
                 "role": "user",
                 "content": (
-                    f"Lead: {payload.lead_context.name}\n"
-                    f"Type: {payload.lead_context.business_type}\n"
-                    f"Rating: {payload.lead_context.rating if payload.lead_context.rating is not None else 'unknown'}\n"
-                    f"Reviews: {' | '.join(payload.lead_context.reviews[:4]) if payload.lead_context.reviews else 'none'}\n"
-                    f"Website notes: {payload.lead_context.website_content or 'none'}\n"
-                    f"Current overview: {payload.lead_context.overview or 'none'}\n"
-                    f"Recommended offer: {payload.lead_context.what_to_sell or 'unknown'}"
+                    f"Lead: {context.name}\n"
+                    f"Type: {context.business_type}\n"
+                    f"Rating: {context.rating if context.rating is not None else 'unknown'}\n"
+                    f"Reviews: {' | '.join(context.reviews[:4]) if context.reviews else 'none'}\n"
+                    f"Website notes: {context.website_content or 'none'}\n"
+                    f"Current overview: {context.overview or 'none'}\n"
+                    f"Recommended offer: {context.what_to_sell or 'unknown'}"
                 ),
             },
             *history,
-            {"role": "user", "content": payload.message},
+            {"role": "user", "content": user_message},
         ]
+        openai_answer = await self._chat_openai(messages)
+        if openai_answer:
+            print("Using OpenAI")
+            logger.info("Lead chat response from OpenAI: %s", openai_answer)
+            return LeadChatResponse(response=openai_answer)
+
+        gemini_answer = await self._chat_gemini(messages)
+        if gemini_answer:
+            print("Using Gemini")
+            logger.info("Lead chat response from Gemini: %s", gemini_answer)
+            return LeadChatResponse(response=gemini_answer)
+
+        print("Using fallback")
+        logger.warning("Lead chat fallback triggered after provider failures.")
+        return LeadChatResponse(response=self._dynamic_chat_fallback(user_message, context.model_dump()))
+
+    async def _chat_openai(self, messages: list[dict]) -> str | None:
+        if not self._settings.openai_api_key:
+            logger.warning("OpenAI chat skipped: missing OPENAI_API_KEY")
+            return None
         try:
             async with httpx.AsyncClient(timeout=25) as client:
                 response = await client.post(
@@ -93,75 +126,51 @@ class LeadAIAssistantService:
                         "Authorization": f"Bearer {self._settings.openai_api_key}",
                         "Content-Type": "application/json",
                     },
-                    json={
-                        "model": self._settings.openai_model,
-                        "messages": messages,
-                    },
+                    json={"model": self._settings.openai_model, "messages": messages},
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]
-                return LeadChatResponse(response=str(content).strip())
+                return str(content).strip()
         except Exception as exc:
-            logger.warning("Lead AI chat failed, using fallback.", exc_info=exc)
-            return LeadChatResponse(
-                response=self._fallback_chat(payload.message, payload.lead_context.business_type),
+            logger.warning("OpenAI chat failed, trying Gemini.", exc_info=exc)
+            return None
+
+    async def _chat_gemini(self, messages: list[dict]) -> str | None:
+        if not self._settings.gemini_api_key:
+            logger.warning("Gemini chat skipped: missing GEMINI_API_KEY")
+            return None
+        try:
+            conversation = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
+            prompt = (
+                "You are a SaaS sales assistant. Respond with tactical, lead-specific advice.\n\n"
+                f"{conversation}"
             )
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+            }
+            url = (
+                "https://generativelanguage.googleapis.com/v1beta/models/"
+                f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
+            )
+            async with httpx.AsyncClient(timeout=25) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+                return str(data["candidates"][0]["content"]["parts"][0]["text"]).strip()
+        except Exception as exc:
+            logger.warning("Gemini chat failed, using fallback.", exc_info=exc)
+            return None
 
-    def _analyze_prompt(self, payload: LeadAnalyzeRequest) -> dict:
-        return {
-            "model": self._settings.openai_model,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a sales consultant for agencies. Return only JSON with actionable output."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Analyze this business for client acquisition.\n\n"
-                        f"Business name: {payload.name}\n"
-                        f"Type: {payload.business_type}\n"
-                        f"Website content: {payload.website_content or 'not available'}\n"
-                        f"Rating: {payload.rating if payload.rating is not None else 'not available'}\n"
-                        f"Reviews: {' | '.join(payload.reviews[:4]) if payload.reviews else 'not available'}\n\n"
-                        "Return JSON with keys:\n"
-                        "{"
-                        '"overview":"...",'
-                        '"strengths":["..."],'
-                        '"weaknesses":["..."],'
-                        '"customer_perception":"...",'
-                        '"opportunities":["..."],'
-                        '"what_to_sell":"website/app/automation recommendation",'
-                        '"outreach_angle":"first message angle"'
-                        "}"
-                    ),
-                },
-            ],
-        }
-
-    def _fallback_analysis(self, business_type: str) -> LeadAnalyzeResponse:
-        type_label = business_type or "local business"
-        return LeadAnalyzeResponse(
-            overview=f"{type_label} appears to have room for stronger digital acquisition and conversion flows.",
-            strengths=["Existing market presence", "Clear core service offering"],
-            weaknesses=["Inconsistent online positioning", "Likely weak lead capture journey"],
-            customer_perception="mixed but recoverable with better digital experience",
-            opportunities=[
-                "Improve trust with modern web presentation",
-                "Add conversion-focused funnels and automation follow-up",
-            ],
-            what_to_sell="Website revamp with lead capture automation",
-            outreach_angle=(
-                f"Offer a quick teardown for this {type_label} showing 2-3 conversion fixes that can increase inquiries."
-            ),
+    def _dynamic_chat_fallback(self, message: str, lead_context: dict) -> str:
+        lead_name = lead_context.get("name") or "this lead"
+        business_type = lead_context.get("business_type") or "business"
+        rating = lead_context.get("rating")
+        review_signal = "limited social proof" if not lead_context.get("reviews") else "existing customer feedback"
+        condition = (
+            f"rating {rating}" if rating is not None else "unknown rating"
         )
-
-    def _fallback_chat(self, message: str, business_type: str) -> str:
         return (
-            f"For this {business_type or 'business'}, position the pitch around revenue impact. "
-            "Lead with one visible problem, one quick win, and a low-friction next step (10-minute audit call). "
-            f"Question asked: {message}"
+            f"I could not reach AI providers right now, so here is a contextual response for {lead_name} ({business_type}): "
+            f"anchor your answer to {review_signal} and {condition}. Start by addressing this question directly: '{message}'. "
+            "Then propose one immediate fix, one measurable KPI outcome, and a 10-minute audit call CTA."
         )

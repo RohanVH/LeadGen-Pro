@@ -40,8 +40,10 @@ class LeadContext(BaseModel):
 
 class LeadChatRequest(BaseModel):
     previous_conversation: list[LeadChatMessage] = Field(default_factory=list, alias="previousConversation")
-    message: str
-    lead_context: LeadContext = Field(alias="leadContext")
+    messages: list[LeadChatMessage] = Field(default_factory=list)
+    message: str = ""
+    lead_context: LeadContext | None = Field(default=None, alias="leadContext")
+    lead: LeadContext | None = None
 
 
 class LeadChatResponse(BaseModel):

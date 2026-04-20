@@ -176,7 +176,7 @@ function LeadAssistantModal({
             {analysisLoading ? (
               <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-800" />
-                Running analysis...
+                Analyzing...
               </div>
             ) : analysis ? (
               <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
@@ -213,7 +213,11 @@ function LeadAssistantModal({
                   {analysis.outreachAngle}
                 </p>
               </div>
-            ) : null}
+            ) : (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Click Analyze to generate live AI insights for this lead.
+              </p>
+            )}
           </section>
 
           <section className="flex min-h-[380px] flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
@@ -235,6 +239,9 @@ function LeadAssistantModal({
               ) : (
                 <p className="text-xs text-slate-400">Ask about objections, pricing angle, offer positioning, or next best step.</p>
               )}
+              {chatLoading ? (
+                <p className="text-xs italic text-slate-500 dark:text-slate-400">AI is thinking...</p>
+              ) : null}
             </div>
             <div className="flex gap-2">
               <input
@@ -349,6 +356,13 @@ function LeadsTable({ leads, loading, loadingStage }) {
 
     setAnalysisLoading(true);
     try {
+      console.log("Lead analyze request payload", {
+        name: lead.name,
+        type: lead.businessType || "business",
+        websiteContent: lead.websiteContent || "",
+        rating: lead.rating || null,
+        reviews: lead.googleReviews || [],
+      });
       const result = await analyzeLead({
         name: lead.name,
         businessType: lead.businessType || "business",
@@ -356,6 +370,7 @@ function LeadsTable({ leads, loading, loadingStage }) {
         rating: lead.rating || null,
         reviews: lead.googleReviews || [],
       });
+      console.log("Lead analyze response payload", result);
       setAnalysisCache((prev) => ({ ...prev, [leadKey]: result }));
     } catch (error) {
       setToast({ type: "error", message: error.message || "Analysis failed." });
@@ -376,10 +391,9 @@ function LeadsTable({ leads, loading, loadingStage }) {
     setChatLoading(true);
     try {
       const analysis = analysisCache[leadKey];
-      const response = await chatWithLeadAssistant({
-        previousConversation: nextMessages,
-        message: nextUserMessage.content,
-        leadContext: {
+      const chatPayload = {
+        messages: nextMessages,
+        lead: {
           name: activeLead.name,
           businessType: activeLead.businessType || "business",
           websiteContent: activeLead.websiteContent || "",
@@ -388,7 +402,12 @@ function LeadsTable({ leads, loading, loadingStage }) {
           overview: analysis?.overview || "",
           whatToSell: analysis?.whatToSell || "",
         },
+      };
+      console.log("Lead chat request payload", chatPayload);
+      const response = await chatWithLeadAssistant({
+        ...chatPayload,
       });
+      console.log("Lead chat response payload", response);
       setChatByLead((prev) => ({
         ...prev,
         [leadKey]: [...(prev[leadKey] || nextMessages), { role: "assistant", content: response.response }],

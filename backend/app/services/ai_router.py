@@ -21,19 +21,27 @@ class AIRouterService:
     async def analyze_business(self, lead_input: dict[str, Any]) -> dict[str, Any]:
         """Return normalized analysis from best available provider."""
         prompt = self._build_prompt(lead_input)
+        logger.info("AI analyze request payload: %s", lead_input)
 
         openai_result = await self._try_openai(prompt)
         if openai_result is not None:
+            print("Using OpenAI")
+            logger.info("AI analyze response from OpenAI: %s", openai_result)
             return self._normalize(openai_result, lead_input)
 
         gemini_result = await self._try_gemini(prompt)
         if gemini_result is not None:
+            print("Using Gemini")
+            logger.info("AI analyze response from Gemini: %s", gemini_result)
             return self._normalize(gemini_result, lead_input)
 
+        print("Using fallback")
+        logger.warning("AI analyze fallback triggered after provider failures.")
         return self._normalize(self._rule_based_fallback(lead_input), lead_input)
 
     async def _try_openai(self, prompt: str) -> dict[str, Any] | None:
         if not self._settings.openai_api_key:
+            logger.warning("OpenAI skipped: missing OPENAI_API_KEY")
             return None
         try:
             payload = {
@@ -68,6 +76,7 @@ class AIRouterService:
 
     async def _try_gemini(self, prompt: str) -> dict[str, Any] | None:
         if not self._settings.gemini_api_key:
+            logger.warning("Gemini skipped: missing GEMINI_API_KEY")
             return None
         try:
             payload = {
