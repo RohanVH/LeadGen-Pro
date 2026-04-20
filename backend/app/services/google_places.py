@@ -58,7 +58,7 @@ class GooglePlacesService:
             return {}
         params = {
             "place_id": place_id,
-            "fields": "formatted_phone_number,website",
+            "fields": "formatted_phone_number,website,rating,user_ratings_total,reviews",
             "key": self._settings.google_places_api_key,
         }
         payload = self._safe_request(self._settings.google_places_details_url, params)

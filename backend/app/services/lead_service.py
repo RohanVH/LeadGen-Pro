@@ -88,16 +88,35 @@ class LeadService:
         email: str | None = None
         email_type = "missing"
         email_confidence = "LOW"
+        email_source = "missing"
         weak_website = False
         website_quality = "NO_WEBSITE"
+        website_content = ""
         if website:
             async with semaphore:
                 email_enrichment = await self._email_scraper_service.enrich_email(website)
                 email = email_enrichment.email
                 email_type = email_enrichment.email_type
                 email_confidence = email_enrichment.email_confidence
+                if email:
+                    email_source = "generated_pattern" if email_type == "generated" else "website_scrape"
                 website_quality = await self._website_analyzer_service.analyze_website(website)
+                website_content = await self._website_analyzer_service.extract_website_text(website)
                 weak_website = website_quality == "WEAK_WEBSITE"
+
+        raw_rating = details.get("rating", place.get("rating"))
+        rating: float | None = None
+        if isinstance(raw_rating, (int, float, str)) and str(raw_rating).strip():
+            try:
+                rating = float(raw_rating)
+            except ValueError:
+                rating = None
+        review_count = int(details.get("user_ratings_total") or place.get("user_ratings_total") or 0)
+        google_reviews = [
+            (review.get("text") or "").strip()
+            for review in (details.get("reviews") or [])
+            if (review.get("text") or "").strip()
+        ]
 
         lead = Lead(
             name=place.get("name", "Unknown"),
@@ -106,7 +125,9 @@ class LeadService:
             website=website,
             email=email,
             email_type=email_type,
+            email_source=email_source,
             email_confidence=email_confidence,
+            website_content=website_content or None,
             city=city,
             business_type=business_type,
             priority_score=self._compute_priority_score(
@@ -118,6 +139,8 @@ class LeadService:
                     email_confidence=email_confidence,
                 ),
                 weak_website=weak_website,
+                rating=rating,
+                review_count=review_count,
             ),
             is_hot_lead=self._is_hot_lead(
                 website=website,
@@ -129,6 +152,9 @@ class LeadService:
                 ),
             ),
             website_quality=website_quality,
+            rating=rating,
+            review_count=review_count,
+            google_reviews=google_reviews,
         )
         return lead
 
@@ -149,19 +175,27 @@ class LeadService:
         phone_number: str | None,
         email: str | None,
         weak_website: bool,
+        rating: float | None,
+        review_count: int,
     ) -> str:
         """Compute lead priority score for conversion-focused triage."""
-        has_phone_or_email = bool(phone_number or email)
-        if not website and has_phone_or_email:
+        no_online_presence = not website and review_count == 0
+        bad_reviews = bool(rating is not None and rating < 3.5 and review_count >= 5)
+        average_reviews = bool(rating is not None and 3.5 <= rating < 4.2 and review_count >= 3)
+
+        if not website or bad_reviews or no_online_presence:
             return "HIGH"
 
-        if website and (not email or weak_website):
+        if weak_website or average_reviews:
             return "MEDIUM"
 
-        if website and email and phone_number:
+        if website and not weak_website and (rating is None or rating >= 4.2) and review_count >= 5:
             return "LOW"
 
-        # Fallback bucket for incomplete records that do not qualify as hot leads.
+        has_phone_or_email = bool(phone_number or email)
+        if has_phone_or_email:
+            return "MEDIUM"
+
         return "MEDIUM"
 
     def _is_hot_lead(

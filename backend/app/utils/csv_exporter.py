@@ -24,6 +24,12 @@ def leads_to_csv(leads: list[Lead]) -> str:
             "city",
             "business_type",
             "priority",
+            "rating",
+            "review_count",
+            "summary",
+            "sentiment",
+            "recommended_action",
+            "pitch",
         ]
     )
     for lead in leads:
@@ -39,6 +45,12 @@ def leads_to_csv(leads: list[Lead]) -> str:
                 lead.city or "",
                 lead.business_type or "",
                 lead.priority_score,
+                lead.rating if lead.rating is not None else "",
+                lead.review_count,
+                lead.business_summary,
+                lead.customer_sentiment,
+                lead.recommended_action,
+                lead.pitch_suggestion,
             ]
         )
 

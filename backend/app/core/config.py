@@ -39,6 +39,10 @@ class Settings(BaseSettings):
         alias="GOOGLE_PLACES_AUTOCOMPLETE_URL",
     )
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
+    ai_max_leads: int = Field(default=12, alias="AI_MAX_LEADS")
+    ai_batch_size: int = Field(default=4, alias="AI_BATCH_SIZE")
     lead_max_results: int = Field(default=12, alias="LEAD_MAX_RESULTS")
     scraper_max_concurrency: int = Field(default=6, alias="SCRAPER_MAX_CONCURRENCY")
     scraper_timeout_seconds: int = Field(default=6, alias="SCRAPER_TIMEOUT_SECONDS")

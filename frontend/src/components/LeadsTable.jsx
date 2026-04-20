@@ -46,6 +46,39 @@ function EmailConfidenceBadge({ value }) {
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{value}</span>;
 }
 
+function SentimentBadge({ value }) {
+  const className =
+    value === "positive"
+      ? "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200"
+      : value === "negative"
+        ? "bg-red-50 text-accepthigh ring-1 ring-red-200"
+        : "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600";
+
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${className}`}>{value}</span>;
+}
+
+function RecommendationBadge({ value }) {
+  const className =
+    value === "contact"
+      ? "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200"
+      : value === "skip"
+        ? "bg-red-50 text-accepthigh ring-1 ring-red-200"
+        : "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
+
+  return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${className}`}>{value}</span>;
+}
+
+function HeaderCell({ title, helper, className = "" }) {
+  return (
+    <th className={`px-4 py-3 align-top ${className}`}>
+      <div className="space-y-0.5">
+        <div>{title}</div>
+        <div className="text-[10px] font-medium normal-case tracking-normal text-slate-400 dark:text-slate-500">{helper}</div>
+      </div>
+    </th>
+  );
+}
+
 function formatEmailType(value) {
   if (!value || value === "missing") {
     return "-";
@@ -184,17 +217,38 @@ function LeadsTable({ leads, loading, loadingStage }) {
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 transition-colors duration-200 dark:bg-slate-900">
+              <tr className="border-b border-slate-200 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                <th className="px-4 py-2" colSpan={5}>
+                  Basic Info
+                </th>
+                <th className="px-4 py-2" colSpan={5}>
+                  Business Insights
+                </th>
+                <th className="px-4 py-2" colSpan={3}>
+                  Sales
+                </th>
+                <th className="px-4 py-2" colSpan={1}>
+                  Outreach
+                </th>
+              </tr>
               <tr className="text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                <th className="px-4 py-3">Business</th>
-                <th className="px-4 py-3">Address</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Website</th>
-                <th className="px-4 py-3">Website Quality</th>
-                <th className="px-4 py-3">Email</th>
-                <th className="px-4 py-3">Type</th>
-                <th className="px-4 py-3">Confidence</th>
-                <th className="px-4 py-3">Priority</th>
-                <th className="px-4 py-3">Actions</th>
+                <HeaderCell title="Name" helper="Business name from search source" />
+                <HeaderCell title="Phone" helper="Primary contact number if available" />
+                <HeaderCell title="Email" helper="Best email found across website pages" />
+                <HeaderCell title="Website" helper="Detected business website URL" />
+                <HeaderCell title="Confidence" helper="Data accuracy score based on available info" />
+
+                <HeaderCell title="Summary" helper="AI overview of current business presence" />
+                <HeaderCell title="Pros" helper="What the business appears to do well" />
+                <HeaderCell title="Cons" helper="Detected gaps or potential pain points" />
+                <HeaderCell title="Sentiment" helper="Customer tone inferred from review signals" />
+                <HeaderCell title="Reviews" helper="Google rating and review count snapshot" />
+
+                <HeaderCell title="Priority" helper="How likely this lead needs a website/app" />
+                <HeaderCell title="Recommendation" helper="AI contact decision for outreach focus" />
+                <HeaderCell title="Pitch" helper="Most relevant offer: website/app/automation" />
+
+                <HeaderCell title="Actions" helper="Direct outreach shortcuts" />
               </tr>
             </thead>
             <tbody>
@@ -220,25 +274,7 @@ function LeadsTable({ leads, loading, loadingStage }) {
                       ) : null}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{lead.address || "-"}</td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{lead.phoneNumber || "-"}</td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
-                    {lead.website ? (
-                      <a
-                        href={lead.website}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="font-semibold text-indigo-600 underline-offset-2 transition-colors duration-200 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
-                      >
-                        Visit
-                      </a>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <WebsiteQualityBadge value={lead.websiteQuality} />
-                  </td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                     {lead.email ? (
                       <div className="flex flex-col gap-1">
@@ -251,17 +287,77 @@ function LeadsTable({ leads, loading, loadingStage }) {
                         {lead.emailType === "generated" ? (
                           <span className="text-[11px] text-slate-500 dark:text-slate-400">Fallback generated email</span>
                         ) : null}
+                        <span className="text-[10px] uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                          source: {lead.emailSource || "missing"}
+                        </span>
                       </div>
                     ) : (
                       "-"
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{formatEmailType(lead.emailType)}</td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                    {lead.website ? (
+                      <div className="flex flex-col gap-1">
+                        <a
+                          href={lead.website}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-indigo-600 underline-offset-2 transition-colors duration-200 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
+                        >
+                          Visit
+                        </a>
+                        <WebsiteQualityBadge value={lead.websiteQuality} />
+                      </div>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td className="px-4 py-3">
-                    <EmailConfidenceBadge value={lead.emailConfidence || "LOW"} />
+                    <div className="space-y-1">
+                      <EmailConfidenceBadge value={lead.emailConfidence || "LOW"} />
+                      <div className="text-[10px] text-slate-400 dark:text-slate-500">{formatEmailType(lead.emailType)}</div>
+                    </div>
+                  </td>
+                  <td className="max-w-xs px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
+                    {lead.businessSummary || "Not available"}
+                  </td>
+                  <td className="max-w-[220px] px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
+                    {lead.pros?.length ? (
+                      <ul className="space-y-1">
+                        {lead.pros.slice(0, 2).map((item, idx) => (
+                          <li key={idx}>+ {item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="max-w-[220px] px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
+                    {lead.cons?.length ? (
+                      <ul className="space-y-1">
+                        {lead.cons.slice(0, 2).map((item, idx) => (
+                          <li key={idx}>- {item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <SentimentBadge value={lead.customerSentiment || "neutral"} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
+                    {lead.rating ? `${lead.rating.toFixed(1)} / 5` : "-"}
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400">{lead.reviewCount || 0} reviews</div>
                   </td>
                   <td className="px-4 py-3">
                     <PriorityBadge value={lead.priorityScore} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <RecommendationBadge value={lead.recommendedAction || "manual review"} />
+                  </td>
+                  <td className="max-w-xs px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
+                    {lead.pitchSuggestion || "Not available"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap items-center gap-2">

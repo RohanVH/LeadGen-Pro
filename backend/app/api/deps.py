@@ -16,7 +16,7 @@ def get_lead_service() -> LeadService:
     places_service = GooglePlacesService(settings=settings)
     email_scraper_service = EmailScraperService(timeout_seconds=settings.scraper_timeout_seconds)
     website_analyzer_service = WebsiteAnalyzerService(timeout_seconds=settings.scraper_timeout_seconds)
-    analyzer_service = LeadAnalyzerService()
+    analyzer_service = LeadAnalyzerService(settings=settings)
     return LeadService(
         settings=settings,
         places_service=places_service,
