@@ -11,6 +11,7 @@ class LeadAnalyzeRequest(BaseModel):
     name: str
     business_type: str = Field(alias="businessType")
     website_content: str | None = Field(default=None, alias="websiteContent")
+    website: str | None = Field(default=None, description="Public website URL if known")
     rating: float | None = None
     reviews: list[str] = Field(default_factory=list)
 

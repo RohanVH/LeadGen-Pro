@@ -11,6 +11,14 @@ from app.core.config import Settings
 
 logger = logging.getLogger(__name__)
 
+_ANALYSIS_SYSTEM = (
+    "You are a senior B2B sales strategist helping reps close deals. "
+    "You output ONLY valid JSON. Every sentence must be grounded in the inputs: business name, type, reviews, rating, website text. "
+    "Forbidden: generic filler like 'shows clear potential', 'conversion-focused digital improvements', "
+    "'active business presence', 'amplified online', or any wording that could apply equally to any random business. "
+    "Required: mention the business by name at least once in 'summary'; tie pros/cons to review themes, stars, or site gaps when data exists."
+)
+
 
 def _coerce_to_object(parsed: Any) -> dict[str, Any] | None:
     """Ensure provider output is a single JSON object (OpenAI/Gemini sometimes wrap or mis-shape)."""
@@ -78,19 +86,14 @@ class AIRouterService:
         try:
             payload = {
                 "model": self._settings.openai_model,
+                "temperature": 0.35,
                 "response_format": {"type": "json_object"},
                 "messages": [
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a sales strategist for agencies. "
-                            "Return only valid JSON in the requested format."
-                        ),
-                    },
+                    {"role": "system", "content": _ANALYSIS_SYSTEM},
                     {"role": "user", "content": prompt},
                 ],
             }
-            async with httpx.AsyncClient(timeout=25) as client:
+            async with httpx.AsyncClient(timeout=55) as client:
                 response = await client.post(
                     f"{self._settings.openai_base_url.rstrip('/')}/chat/completions",
                     headers={
@@ -114,17 +117,30 @@ class AIRouterService:
         if not self._settings.gemini_api_key:
             logger.warning("Gemini skipped: missing GEMINI_API_KEY")
             return None
+        url = (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
+        )
+        payload_primary = {
+            "systemInstruction": {"parts": [{"text": _ANALYSIS_SYSTEM}]},
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json", "temperature": 0.35},
+        }
+        payload_flat = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": f"{_ANALYSIS_SYSTEM}\n\n---\n\n{prompt}"}],
+                }
+            ],
+            "generationConfig": {"response_mime_type": "application/json", "temperature": 0.35},
+        }
         try:
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"response_mime_type": "application/json"},
-            }
-            url = (
-                "https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
-            )
-            async with httpx.AsyncClient(timeout=25) as client:
-                response = await client.post(url, json=payload)
+            async with httpx.AsyncClient(timeout=55) as client:
+                response = await client.post(url, json=payload_primary)
+                if response.status_code >= 400:
+                    logger.warning("Gemini analyze HTTP %s; retrying without systemInstruction.", response.status_code)
+                    response = await client.post(url, json=payload_flat)
                 response.raise_for_status()
                 data = response.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -140,28 +156,43 @@ class AIRouterService:
     def _build_prompt(self, lead_input: dict[str, Any]) -> str:
         name = lead_input.get("name") or "Unknown business"
         business_type = lead_input.get("business_type") or "unknown"
-        website_content = lead_input.get("website_content") or "not available"
+        website_url = (lead_input.get("website") or "").strip() or "not listed"
+        website_content = lead_input.get("website_content") or ""
+        if not str(website_content).strip():
+            website_content = "not available (no crawl or no site)"
+        else:
+            website_content = str(website_content).strip()[:4000]
         rating = lead_input.get("rating")
         review_count = int(lead_input.get("review_count") or 0)
         reviews = lead_input.get("google_reviews") or []
-        review_snippets = " | ".join(str(r) for r in reviews[:4] if str(r).strip()) if reviews else "not available"
+        review_lines = "\n".join(f"- {str(r).strip()}" for r in reviews[:6] if str(r).strip())
+        if not review_lines:
+            review_lines = "(no review text in our export)"
+
         return (
-            "Analyze this business lead and decide if it is worth contacting.\n\n"
-            f"Business name: {name}\n"
-            f"Business type: {business_type}\n"
-            f"Website content: {website_content}\n"
-            f"Rating: {rating if rating is not None else 'not available'}\n"
-            f"Review count: {review_count}\n"
-            f"Google reviews: {review_snippets}\n\n"
-            "Output JSON with this exact structure:\n"
-            "{"
-            '"summary":"...",'
-            '"pros":["...","..."],'
-            '"cons":["...","..."],'
-            '"sentiment":"positive/neutral/negative",'
-            '"action":"contact/skip",'
-            '"pitch":"suggest solution"'
-            "}"
+            "Produce a DEAL-READY analysis for ONE lead the rep is about to call or email.\n\n"
+            "INPUTS\n"
+            f"- Business name: {name}\n"
+            f"- Category / type: {business_type}\n"
+            f"- Public website URL (if known): {website_url}\n"
+            f"- Homepage / site text we scraped (may be partial): {website_content}\n"
+            f"- Google star rating: {rating if rating is not None else 'unknown'}\n"
+            f"- Review count (Google): {review_count}\n"
+            f"- Review excerpts:\n{review_lines}\n\n"
+            "RULES\n"
+            f"1) summary: 2–4 sentences. Name “{name}” explicitly. Say what they likely sell/do for customers, "
+            "what the rating/reviews suggest about quality or demand, and one concrete gap or opportunity "
+            "(e.g. booking, mobile site, follow-up) inferred from reviews or site text—not generic marketing speak.\n"
+            "2) pros: 2-4 bullets. Each bullet must cite a signal (e.g. \"4.8* with 40+ reviews implies...\", "
+            "“Reviewers mention ‘friendly staff’ → …”). If data is thin, say what is missing and how to verify on the call.\n"
+            "3) cons / risks: 2–4 bullets. Honest blockers (e.g. weak site, few reviews, seasonal risk) tied to this business.\n"
+            "4) sentiment: positive | neutral | negative — from review tone + rating, not a guess from category alone.\n"
+            "5) action: contact if worth a conversation; skip only if clearly a bad fit.\n"
+            "6) pitch: ONE specific offer line (e.g. “mobile booking + SMS reminders for grooming slots”) aligned with "
+            f"{business_type} and the gaps you inferred—not a vague “digital package”.\n\n"
+            "Return ONLY valid JSON with exactly these keys (no markdown, no extra keys):\n"
+            '{"summary":"string","pros":["string","string"],"cons":["string","string"],'
+            '"sentiment":"positive|neutral|negative","action":"contact|skip","pitch":"string"}'
         )
 
     def _normalize(self, output: dict[str, Any], lead_input: dict[str, Any]) -> dict[str, Any]:
@@ -200,41 +231,90 @@ class AIRouterService:
         }
 
     def _rule_based_fallback(self, lead_input: dict[str, Any]) -> dict[str, Any]:
-        business_type = str(lead_input.get("business_type") or "local business")
-        has_website = bool(lead_input.get("website"))
+        name = str(lead_input.get("name") or "This business").strip() or "This business"
+        business_type = str(lead_input.get("business_type") or "business").strip()
+        website_url = (lead_input.get("website") or "").strip()
+        wc = (lead_input.get("website_content") or "").strip()
+        has_site_signal = bool(website_url) or bool(wc)
         rating = lead_input.get("rating")
         review_count = int(lead_input.get("review_count") or 0)
+        reviews = [str(r).strip() for r in (lead_input.get("google_reviews") or []) if str(r).strip()]
+        first_review = reviews[0][:220] + ("…" if len(reviews[0]) > 220 else "") if reviews else ""
 
-        weak_social_proof = rating is not None and float(rating) < 4.0 and review_count >= 3
-        poor_presence = (not has_website) or review_count == 0
+        try:
+            rnum = float(rating) if rating is not None else None
+        except (TypeError, ValueError):
+            rnum = None
 
-        if poor_presence or weak_social_proof:
-            sentiment = "negative" if weak_social_proof else "neutral"
-            action = "contact"
-            pitch = "Website + automation lead capture package"
-            cons = [
-                "Limited digital trust and conversion flow",
-                "Potentially weak follow-up systems for new inquiries",
-            ]
-        else:
+        weak_social = rnum is not None and rnum < 4.0 and review_count >= 3
+        thin_reviews = review_count == 0 and not reviews
+
+        if rnum is not None and rnum >= 4.5 and review_count >= 8:
             sentiment = "positive"
-            action = "contact"
-            pitch = "Automation and conversion optimization upgrade"
-            cons = [
-                "Likely missing advanced funnel automation",
-                "Opportunity to improve retention and reactivation",
-            ]
+        elif weak_social:
+            sentiment = "negative"
+        else:
+            sentiment = "neutral"
+
+        action = "contact"
+
+        if business_type.lower() in {"pet grooming salon", "pet grooming", "grooming"} or "groom" in business_type.lower():
+            pitch = "Online booking + SMS reminders for appointments, plus a simple ‘before/after’ gallery to lift conversions"
+        elif "restaurant" in business_type.lower() or "cafe" in business_type.lower():
+            pitch = "Reservations, menu SEO, and Google Business Profile review capture tied to dine-in traffic"
+        else:
+            pitch = f"Clear website offer + lead capture tuned to {business_type} buyers (audit first call)"
+
+        summary_parts = [
+            f"{name} operates as {business_type}.",
+        ]
+        if rnum is not None:
+            summary_parts.append(
+                f"Signals: about {review_count} Google reviews and a {rnum}* average - use that social proof in your opener."
+            )
+        elif review_count:
+            summary_parts.append(f"They have roughly {review_count} Google reviews—quote themes on the call.")
+        else:
+            summary_parts.append("Review volume in our export is low; validate reputation live on the call.")
+
+        if first_review:
+            summary_parts.append(f'Example review theme to reference: "{first_review}"')
+
+        if not has_site_signal:
+            summary_parts.append(
+                "We see little or no website text—position a small site or landing page plus measurable lead capture."
+            )
+        else:
+            summary_parts.append(
+                "We have some site text—use a short audit to find booking/contact friction and fix the top leak first."
+            )
+
+        pros = [
+            f"Named account “{name}” — you can personalize outreach and avoid spray-and-pray.",
+        ]
+        if rnum is not None and rnum >= 4.2:
+            pros.append(
+                f"Rating {rnum}* suggests satisfied customers - ask what they want next (booking, upsell, loyalty)."
+            )
+        elif reviews:
+            pros.append("Review excerpts give you real phrases to mirror in email subject lines and calls.")
+        else:
+            pros.append("Category + location are enough to run a tight discovery call if you prepare 3 questions.")
+
+        cons = []
+        if thin_reviews:
+            cons.append("Thin or missing review text in export—confirm trust signals before promising ROI.")
+        if not has_site_signal:
+            cons.append("Weak or missing web presence in our data—scope a minimal viable site before big builds.")
+        if weak_social:
+            cons.append("Rating/review mix looks fragile—lead with diagnosis, not a big retainer pitch.")
+        if not cons:
+            cons.append("Differentiation vs nearby competitors still unknown—ask how they win repeat customers.")
 
         return {
-            "summary": (
-                f"{business_type.title()} shows clear potential for stronger client acquisition "
-                "with conversion-focused digital improvements."
-            ),
-            "pros": [
-                "Active business presence in local market",
-                "Clear service positioning that can be amplified online",
-            ],
-            "cons": cons,
+            "summary": " ".join(summary_parts),
+            "pros": pros[:4],
+            "cons": cons[:4],
             "sentiment": sentiment,
             "action": action,
             "pitch": pitch,

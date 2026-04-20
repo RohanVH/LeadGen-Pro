@@ -32,6 +32,7 @@ class LeadAIAssistantService:
         lead_input = {
             "name": payload.name,
             "business_type": payload.business_type,
+            "website": (payload.website or "").strip() or None,
             "website_content": payload.website_content,
             "rating": payload.rating,
             "review_count": len(payload.reviews),
@@ -43,19 +44,22 @@ class LeadAIAssistantService:
             logger.exception("Lead analyze failed; using rule-based fallback.")
             normalized = self._ai_router.normalized_rule_based_fallback(lead_input)
         logger.info("Lead analyze normalized AI response: %s", normalized)
+        pitch = str(normalized.get("pitch") or "").strip() or "a focused digital upgrade for their funnel"
+        action = str(normalized.get("action") or "contact").strip()
+        overview = str(normalized.get("summary") or "").strip()
         return LeadAnalyzeResponse(
-            overview=str(normalized.get("summary") or ""),
+            overview=overview,
             strengths=[str(item) for item in (normalized.get("pros") or [])][:4],
             weaknesses=[str(item) for item in (normalized.get("cons") or [])][:4],
             customer_perception=str(normalized.get("sentiment") or "neutral"),
             opportunities=[
-                f"Prioritize outreach because action is '{normalized.get('action', 'contact')}'.",
-                f"Lead with this offer: {normalized.get('pitch', 'digital growth package')}.",
+                f"Deal angle: start with what their reviews/rating imply about demand, then connect to {pitch}.",
+                f"Suggested next step: {'book a 15-min audit' if action == 'contact' else 'qualify fit first'} — tie every claim to their site, reviews, or gaps above.",
             ],
-            what_to_sell=str(normalized.get("pitch") or "digital growth package"),
+            what_to_sell=pitch,
             outreach_angle=(
-                f"Reference '{normalized.get('summary', 'their business context')}' and propose "
-                f"{normalized.get('pitch', 'a focused conversion upgrade')} in a short audit call."
+                f"Open by naming {payload.name} and one concrete signal from their data (review theme, rating, or website gap). "
+                f"Offer {pitch} as the logical next step, not a generic pitch deck."
             ),
         )
 

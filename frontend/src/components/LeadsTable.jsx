@@ -373,7 +373,8 @@ function LeadsTable({ leads, loading, loadingStage }) {
         name: lead.name,
         businessType: lead.businessType || "business",
         websiteContent: lead.websiteContent || "",
-        rating: lead.rating || null,
+        website: lead.website || null,
+        rating: lead.rating ?? null,
         reviews: lead.googleReviews || [],
       });
       console.log("Lead analyze response payload", result);
