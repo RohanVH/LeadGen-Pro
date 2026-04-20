@@ -138,17 +138,17 @@ class LeadAIAssistantService:
             *openai_history,
         ]
 
-        gemini_answer = await self._chat_gemini(system_prompt, openai_history, user_message)
-        if gemini_answer:
-            logger.info("Lead chat response from Gemini (preview): %s...", gemini_answer[:120])
-            return LeadChatResponse(response=gemini_answer)
-
         openai_answer = await self._chat_openai(openai_messages)
         if openai_answer:
             logger.info("Lead chat response from OpenAI (preview): %s...", openai_answer[:120])
             return LeadChatResponse(response=openai_answer)
 
-        logger.warning("Lead chat fallback triggered after Gemini and OpenAI failures.")
+        gemini_answer = await self._chat_gemini(system_prompt, openai_history, user_message)
+        if gemini_answer:
+            logger.info("Lead chat response from Gemini (fallback) (preview): %s...", gemini_answer[:120])
+            return LeadChatResponse(response=gemini_answer)
+
+        logger.warning("Lead chat fallback triggered after OpenAI and Gemini failures.")
         return LeadChatResponse(
             response=self._dynamic_chat_fallback(user_message, context.model_dump(by_alias=True))
         )
@@ -492,5 +492,5 @@ class LeadAIAssistantService:
             f"(Offline mode) For {lead_name} ({business_type}): use {review_signal} and {condition}. "
             f'About your question: "{message}" — use the table fields above on your call. '
             "The AI chat request did not return a usable reply from the model (timeout, model name, or provider error). "
-            "If this persists, set GEMINI_CHAT_MODEL to the same value as GEMINI_MODEL or check server logs for the exact HTTP error."
+            "If this persists, check server logs for OpenAI/Gemini HTTP errors (e.g. OPENAI_MODEL, quotas, timeouts)."
         )
