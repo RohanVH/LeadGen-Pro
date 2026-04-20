@@ -71,7 +71,7 @@ function LeadDashboardPage() {
       </div>
 
       <PageSection
-        className="relative z-30"
+        className="relative z-10"
         eyebrow="Step 1"
         title="Search & targeting"
         description="Pick a category, refine the business type, then choose country and city."
