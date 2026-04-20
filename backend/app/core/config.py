@@ -1,5 +1,6 @@
 """Application configuration and settings."""
 
+import os
 from functools import lru_cache
 from typing import List
 
@@ -17,6 +18,9 @@ class Settings(BaseSettings):
     app_host: str = Field(default="0.0.0.0", alias="APP_HOST")
     app_port: int = Field(default=8000, alias="APP_PORT")
     frontend_origin: str = Field(default="http://localhost:5173", alias="FRONTEND_ORIGIN")
+    vercel_url: str = Field(default="", alias="VERCEL_URL")
+    vercel_branch_url: str = Field(default="", alias="VERCEL_BRANCH_URL")
+    vercel_project_production_url: str = Field(default="", alias="VERCEL_PROJECT_PRODUCTION_URL")
 
     google_places_api_key: str = Field(
         default="",
@@ -56,10 +60,29 @@ class Settings(BaseSettings):
     @property
     def frontend_origins(self) -> List[str]:
         """Return normalized frontend origins for CORS configuration."""
-        return [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
+        origins: list[str] = [origin.strip() for origin in self.frontend_origin.split(",") if origin.strip()]
+
+        for host in (
+            self.vercel_url,
+            self.vercel_branch_url,
+            self.vercel_project_production_url,
+        ):
+            if host:
+                origins.append(f"https://{host.strip()}")
+
+        seen: set[str] = set()
+        normalized: list[str] = []
+        for origin in origins:
+            if origin not in seen:
+                seen.add(origin)
+                normalized.append(origin)
+
+        return normalized
 
 
 @lru_cache
 def get_settings() -> Settings:
     """Return a cached settings instance."""
+    if os.getenv("VERCEL") and not os.getenv("APP_ENV"):
+        os.environ["APP_ENV"] = "production"
     return Settings()

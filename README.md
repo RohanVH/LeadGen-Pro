@@ -113,12 +113,14 @@ requirements.txt      # Root Python deps for Vercel
 
 - `api/index.py`
   - imports the existing FastAPI app from `backend/app/main.py`
-  - exposes `handler = Mangum(app)` for Vercel Python runtime
+  - exposes the top-level `app` ASGI instance for Vercel's Python runtime
 - `vercel.json`
   - builds the frontend from `frontend/`
-  - serves backend requests from `/api/*`
+  - lets Vercel serve Python functions from `api/` using its native routing
 - `requirements.txt`
-  - forwards to `backend/requirements.txt`
+  - mirrors the backend Python dependencies for Vercel builds
+- `.python-version`
+  - pins Python 3.12 so local and Vercel runtimes stay aligned
 
 ### Local Verification Before Deploy
 
@@ -157,10 +159,11 @@ Set these in the Vercel dashboard for the project:
 - `GEODB_CITIES_URL`
 
 Notes:
-- Use `FRONTEND_ORIGIN=https://your-vercel-project.vercel.app`
+- Use `FRONTEND_ORIGIN=https://lead-gen-pro-mu.vercel.app`
 - `OPENAI_API_KEY` is safe to configure now even though the current app does not yet require it at runtime
 - Keep `LEAD_MAX_RESULTS` between `10` and `15` for Vercel-friendly response times
 - Set `SCRAPER_TIMEOUT_SECONDS=5` to keep scraping under serverless limits
+- Enable "Automatically expose System Environment Variables" so preview and production URLs are added to the CORS allowlist automatically
 
 ### Deploy to Vercel
 

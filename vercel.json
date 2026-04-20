@@ -1,13 +1,7 @@
 {
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
-    }
-  ],
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "installCommand": "npm install --prefix frontend",
   "buildCommand": "npm run build",
   "outputDirectory": "frontend/dist"
 }
-
