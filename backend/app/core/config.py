@@ -50,7 +50,11 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("GEMINI_API_KEY", "gemini_api_key"),
         description="Google Gemini API key; add GEMINI_API_KEY in Vercel environment variables when the API runs there.",
     )
-    gemini_model: str = Field(default="gemini-1.5-flash", alias="GEMINI_MODEL")
+    gemini_model: str = Field(
+        default="gemini-2.0-flash",
+        alias="GEMINI_MODEL",
+        description="Gemini model id for REST generateContent; gemini-2.0-flash is widely available on AI Studio.",
+    )
     gemini_chat_model: str = Field(
         default="",
         alias="GEMINI_CHAT_MODEL",

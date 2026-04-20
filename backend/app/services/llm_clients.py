@@ -1,9 +1,8 @@
-"""Production LLM calls: OpenAI official SDK + Google Gemini REST (v1), strict timeouts and logging."""
+"""Production LLM calls: OpenAI official SDK + Google Gemini REST (v1beta generateContent), strict timeouts and logging."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from typing import Any
 
@@ -41,7 +40,6 @@ def openai_chat_completion_sync(
     """Blocking OpenAI chat; raises on API/timeout errors."""
     client = _openai_client(settings)
     model = settings.openai_model
-    print("Using OpenAI")
     logger.info("Using OpenAI for chat (model=%s)", model)
     try:
         response = client.chat.completions.create(
@@ -83,7 +81,6 @@ def openai_chat_completion_json_analyze_sync(
     """Blocking OpenAI chat with JSON object format for lead analyze."""
     client = _openai_client(settings)
     model = settings.openai_model
-    print("Using OpenAI")
     logger.info("Using OpenAI for analyze (model=%s)", model)
     messages = [
         {"role": "system", "content": system_text},
@@ -153,17 +150,19 @@ def gemini_generate_content_v1_sync(
     else:
         body["generationConfig"] = {"temperature": 0.65, "maxOutputTokens": 2048}
 
-    print("Using Gemini")
-    logger.info("Using Gemini (v1 REST, model=%s)", model_id)
+    logger.info("Using Gemini (v1beta REST, model=%s)", model_id)
     with httpx.Client(timeout=AI_REQUEST_TIMEOUT_SEC) as client:
         response = client.post(url, json=body)
         if response.status_code >= 400:
             logger.error(
-                "GEMINI HTTP ERROR status=%s body=%s",
+                "GEMINI HTTP ERROR model=%s status=%s body=%s",
+                model_id,
                 response.status_code,
                 response.text[:1200],
             )
-            response.raise_for_status()
+            raise ValueError(
+                f"Gemini generateContent HTTP {response.status_code} for model {model_id!r}"
+            ) from None
         data = response.json()
     candidates = data.get("candidates") or []
     if not candidates:

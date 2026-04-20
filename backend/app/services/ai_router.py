@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from app.core.config import Settings
+from app.core.gemini_models import gemini_model_chain
 from app.services.llm_clients import (
     gemini_generate_content_v1_sync,
     openai_chat_completion_json_analyze_sync,
@@ -73,8 +74,7 @@ class AIRouterService:
             logger.info("AI analyze response from Gemini: %s", gemini_result)
             return self._normalize(gemini_result, lead_input)
 
-        print("Fallback triggered")
-        logger.warning("AI analyze fallback triggered after provider failures.")
+        logger.warning("Fallback triggered: AI analyze using rule-based output after provider failures.")
         return self._normalize(self._rule_based_fallback(lead_input), lead_input)
 
     def normalized_rule_based_fallback(self, lead_input: dict[str, Any]) -> dict[str, Any]:
@@ -94,7 +94,6 @@ class AIRouterService:
             )
         except Exception as exc:
             logger.error("AI OPENAI ANALYZE ERROR: %s", exc, exc_info=True)
-            print("AI ERROR:", str(exc))
             return None
         parsed = _parse_json_object_from_text(raw)
         if parsed is None:
@@ -108,13 +107,7 @@ class AIRouterService:
             return None
         combined = f"{_ANALYSIS_SYSTEM}\n\n---\n\n{prompt}"
         api_key = self._settings.gemini_api_key
-        models_order: list[str] = []
-        seen: set[str] = set()
-        for mid in (self._settings.gemini_model, "gemini-1.5-flash"):
-            m = (mid or "").strip()
-            if m and m not in seen:
-                seen.add(m)
-                models_order.append(m)
+        models_order = gemini_model_chain(self._settings.gemini_model)
 
         for model_id in models_order:
             for use_json in (True, False):
@@ -134,7 +127,6 @@ class AIRouterService:
                         exc,
                         exc_info=True,
                     )
-                    print("AI ERROR:", str(exc))
                     continue
                 parsed = _parse_json_object_from_text(raw)
                 if parsed is not None:

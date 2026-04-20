@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 
-import httpx
 from app.core.config import Settings
+from app.core.gemini_models import gemini_model_chain
+from app.services.llm_clients import gemini_generate_content_v1_sync, run_sync_with_ai_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -39,24 +40,32 @@ class BusinessTypeSuggesterService:
             "- No explanation text."
         )
 
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"response_mime_type": "application/json"},
-        }
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
-        )
-        try:
-            async with httpx.AsyncClient(timeout=20) as client:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-                data = response.json()
-                text = str(data["candidates"][0]["content"]["parts"][0]["text"]).strip()
-                parsed = json.loads(text)
+        for model_id in gemini_model_chain(self._settings.gemini_model):
+            for use_json in (True, False):
+                try:
+                    raw = await run_sync_with_ai_timeout(
+                        gemini_generate_content_v1_sync,
+                        self._settings.gemini_api_key,
+                        model_id,
+                        prompt,
+                        response_mime_json=use_json,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Gemini business type suggestion failed model=%s json=%s: %s",
+                        model_id,
+                        use_json,
+                        exc,
+                    )
+                    continue
+                try:
+                    parsed = json.loads(raw)
+                except json.JSONDecodeError:
+                    logger.warning("Gemini suggest non-JSON text for model=%s", model_id)
+                    continue
                 suggestions = parsed.get("suggestions") if isinstance(parsed, dict) else []
                 if not isinstance(suggestions, list):
-                    return []
+                    continue
                 cleaned: list[str] = []
                 seen: set[str] = set()
                 for item in suggestions:
@@ -69,8 +78,7 @@ class BusinessTypeSuggesterService:
                     seen.add(key)
                     cleaned.append(value)
                     if len(cleaned) >= 8:
-                        break
-                return cleaned
-        except Exception as exc:
-            logger.warning("Gemini business type suggestion failed.", exc_info=exc)
-            return []
+                        return cleaned
+                if cleaned:
+                    return cleaned
+        return []

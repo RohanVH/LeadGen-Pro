@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_google_places_service, get_location_dataset_service
@@ -9,6 +11,8 @@ from app.schemas.location import LocationSuggestion, LocationSuggestionsResponse
 from app.services.google_places import GooglePlacesService
 from app.services.location_dataset import LocationDatasetService
 from app.utils.location_seeds import LOCATION_SEEDS
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 
@@ -24,15 +28,16 @@ def autocomplete_locations(
         predictions = places_service.autocomplete_locations(query=q, country=country)
         suggestions = [
             LocationSuggestion(
-                placeId=prediction["place_id"],
-                mainText=prediction.get("structured_formatting", {}).get("main_text") or prediction.get("description", ""),
+                placeId=str(prediction.get("place_id") or f"unknown:{idx}"),
+                mainText=prediction.get("structured_formatting", {}).get("main_text")
+                or prediction.get("description", ""),
                 secondaryText=prediction.get("structured_formatting", {}).get("secondary_text") or "",
             )
-            for prediction in predictions
+            for idx, prediction in enumerate(predictions)
         ]
         return LocationSuggestionsResponse(suggestions=suggestions)
-    except Exception as e:
-        print("Autocomplete error:", str(e))
+    except Exception:
+        logger.exception("Autocomplete error for q=%r country=%r", q, country)
         return LocationSuggestionsResponse(suggestions=[])
 
 
@@ -62,7 +67,7 @@ def popular_locations(
         if places:
             suggestions = [
                 LocationSuggestion(
-                    placeId=place["place_id"],
+                    placeId=str(place.get("place_id") or f"unknown:{country}:{place.get('name', '')}"),
                     mainText=place.get("name", ""),
                     secondaryText=place.get("formatted_address", ""),
                 )
@@ -80,8 +85,8 @@ def popular_locations(
             for city in seed_locations[:20]
         ]
         return LocationSuggestionsResponse(suggestions=suggestions)
-    except Exception as e:
-        print("Popular locations error:", str(e))
+    except Exception:
+        logger.exception("Popular locations error for country=%r", country)
         return LocationSuggestionsResponse(suggestions=[])
 
 

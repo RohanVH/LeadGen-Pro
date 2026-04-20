@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from app.core.config import Settings
+from app.core.gemini_models import gemini_model_chain
 from app.services.llm_clients import (
     gemini_chat_flat_v1_sync,
     openai_chat_completion_sync,
@@ -46,7 +47,7 @@ class LeadAIAssistantService:
             normalized = await self._ai_router.analyze_business(lead_input)
         except Exception as e:
             logger.exception("Lead analyze failed; using rule-based fallback: %s", e)
-            print("AI ERROR:", str(e))
+            logger.error("Lead analyze outer failure: %s", e, exc_info=True)
             normalized = self._ai_router.normalized_rule_based_fallback(lead_input)
         logger.info("Lead analyze normalized AI response: %s", normalized)
         pitch = str(normalized.get("pitch") or "").strip() or "a focused digital upgrade for their funnel"
@@ -164,8 +165,7 @@ class LeadAIAssistantService:
             logger.info("Lead chat response from Gemini (fallback) (preview): %s...", gemini_answer[:120])
             return LeadChatResponse(response=gemini_answer)
 
-        print("Fallback triggered")
-        logger.warning("Lead chat fallback triggered after OpenAI and Gemini failures.")
+        logger.warning("Fallback triggered: lead chat using rule-based reply after provider failures.")
         return LeadChatResponse(
             response=self._dynamic_chat_fallback(user_message, context.model_dump(by_alias=True))
         )
@@ -183,28 +183,12 @@ class LeadAIAssistantService:
             )
         except Exception as exc:
             logger.error("AI OPENAI CHAT ERROR: %s", exc, exc_info=True)
-            print("AI ERROR:", str(exc))
             return None
 
-    def _gemini_chat_model_id(self) -> str:
-        """Same model as batch/analyze unless GEMINI_CHAT_MODEL is set explicitly."""
-        return (self._settings.gemini_chat_model or "").strip() or self._settings.gemini_model
-
     def _gemini_model_fallback_chain(self) -> list[str]:
-        """Try chat model first, then the analyze model, then common ids (deduped)."""
-        ordered: list[str] = []
-        seen: set[str] = set()
-        for mid in (
-            self._gemini_chat_model_id(),
-            self._settings.gemini_model,
-            "gemini-1.5-flash",
-            "gemini-2.0-flash",
-        ):
-            m = (mid or "").strip()
-            if m and m not in seen:
-                seen.add(m)
-                ordered.append(m)
-        return ordered
+        """Prefer GEMINI_CHAT_MODEL when set, else GEMINI_MODEL, then shared REST fallbacks."""
+        primary = (self._settings.gemini_chat_model or "").strip() or self._settings.gemini_model
+        return gemini_model_chain(primary)
 
     async def _chat_gemini(
         self,
@@ -229,7 +213,6 @@ class LeadAIAssistantService:
                 )
             except Exception as exc:
                 logger.error("AI GEMINI CHAT ERROR model=%s: %s", model_id, exc, exc_info=True)
-                print("AI ERROR:", str(exc))
                 continue
         return None
 

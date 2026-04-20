@@ -18,25 +18,23 @@ class GooglePlacesService:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def _safe_request(self, url, params):
+    def _safe_request(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
         try:
-            print(f"Making request to {url}")
+            logger.debug("Places GET %s", url)
             response = requests.get(url, params=params, timeout=5)
-            print(f"Response status: {response.status_code}")
+            logger.debug("Places response status: %s", response.status_code)
             if response.status_code != 200:
-                print("Bad status code")
+                logger.warning("Places HTTP non-200: %s", response.status_code)
                 return {}
-            data = response.json()
-            return data
-        except Exception as e:
-            print(f"Request error: {str(e)}")
+            return response.json()
+        except Exception:
+            logger.exception("Places request failed")
             return {}
 
-    def _ensure_api_key(self):
+    def _ensure_api_key(self) -> bool:
         if not self._settings.google_places_api_key:
-            print("Missing Google Places API key")
+            logger.warning("Missing Google Places API key")
             return False
-        print("API KEY present")
         return True
 
     def search_businesses(self, query: str, max_results: int = 300) -> list[dict[str, Any]]:
@@ -51,7 +49,7 @@ class GooglePlacesService:
         next_page_token: str | None = None
 
         while len(all_results) < max_results:
-            params = {"key": self._settings.google_places_api_key}
+            params: dict[str, Any] = {"key": self._settings.google_places_api_key}
             if next_page_token:
                 # Google requires a short delay before next_page_token becomes valid.
                 time.sleep(2)
@@ -73,7 +71,7 @@ class GooglePlacesService:
                 api_status = payload.get("status", "UNKNOWN")
 
             if api_status not in {"OK", "ZERO_RESULTS"}:
-                print(f"Bad status: {api_status}")
+                logger.warning("Places Text Search status=%s", api_status)
                 break
 
             for result in payload.get("results", []):
@@ -105,16 +103,21 @@ class GooglePlacesService:
         if not payload:
             return {}
         if payload.get("status") != "OK":
-            print("Bad details status")
+            logger.warning("Places Details status=%s", payload.get("status"))
             return {}
         return payload.get("result", {})
 
     def autocomplete_locations(self, query: str, country: str | None = None) -> list[dict[str, Any]]:
         """Fetch location autocomplete suggestions."""
-        print(f"autocomplete_locations query: {query}, country: {country}")
+        logger.debug("autocomplete_locations query=%r country=%r", query, country)
         if not self._ensure_api_key():
-            print("No API key, fallback")
-            return [{"description": query}]
+            return [
+                {
+                    "place_id": f"fallback:{country or 'none'}:{query[:80]}",
+                    "description": query,
+                    "structured_formatting": {"main_text": query, "secondary_text": country or ""},
+                }
+            ]
         params = {
             "input": f"{query}, {country}" if country else query,
             "types": "(regions)",
@@ -125,7 +128,7 @@ class GooglePlacesService:
             return []
         api_status = payload.get("status", "UNKNOWN")
         if api_status not in {"OK", "ZERO_RESULTS"}:
-            print(f"Bad autocomplete status: {api_status}")
+            logger.warning("Places Autocomplete status=%s", api_status)
             return []
         return payload.get("predictions", [])
 
@@ -133,10 +136,26 @@ class GooglePlacesService:
         """Fetch popular locations fallback."""
         places = self.search_businesses(f"major cities in {country}")
         if not places:
-            print("No places, fallback cities")
-            return [{"name": "Mumbai"}, {"name": "Delhi"}, {"name": "Bangalore"}]
-        deduped = []
-        seen = set()
+            logger.info("No places from Text Search; using static city fallbacks for %s", country)
+            return [
+                {
+                    "place_id": f"fallback:{country}:Mumbai",
+                    "name": "Mumbai",
+                    "formatted_address": country,
+                },
+                {
+                    "place_id": f"fallback:{country}:Delhi",
+                    "name": "Delhi",
+                    "formatted_address": country,
+                },
+                {
+                    "place_id": f"fallback:{country}:Bangalore",
+                    "name": "Bangalore",
+                    "formatted_address": country,
+                },
+            ]
+        deduped: list[dict[str, Any]] = []
+        seen: set[str] = set()
         for place in places:
             name = (place.get("name") or "").strip().lower()
             if name not in seen and len(deduped) < 10:
@@ -157,7 +176,6 @@ class GooglePlacesService:
         if not payload:
             return {}
         if payload.get("status") != "OK":
-            print("Bad location details")
+            logger.warning("Places location details status=%s", payload.get("status"))
             return {}
         return payload.get("result", {})
-
