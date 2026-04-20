@@ -421,8 +421,8 @@ function LeadsTable({ leads, loading, loadingStage }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-gray-50 p-10 text-center text-sm text-slate-600 shadow-card transition-colors duration-200 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
-        <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-900" />
+      <div className="flex items-center justify-center gap-3 rounded-2xl border border-slate-200/90 bg-white/80 p-12 text-center text-sm font-medium text-slate-600 shadow-glow backdrop-blur-sm dark:border-slate-700/90 dark:bg-slate-900/70 dark:text-slate-300">
+        <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600 dark:border-indigo-900 dark:border-t-indigo-400" />
         {loadingStage || "Fetching leads..."}
       </div>
     );
@@ -430,8 +430,9 @@ function LeadsTable({ leads, loading, loadingStage }) {
 
   if (!leads.length) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-gray-50 p-8 text-center text-sm text-slate-600 shadow-card transition-colors duration-200 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
-        No leads found. Try a different location or business type.
+      <div className="rounded-2xl border border-dashed border-slate-300/90 bg-slate-50/80 p-10 text-center dark:border-slate-600 dark:bg-slate-900/50">
+        <p className="text-sm font-medium text-slate-600 dark:text-slate-400">No leads in this view yet.</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">Run a search above, or widen your filters.</p>
       </div>
     );
   }
@@ -439,11 +440,11 @@ function LeadsTable({ leads, loading, loadingStage }) {
   return (
     <div className="space-y-3">
       <Toast toast={toast} />
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-gray-50 shadow-card transition-colors duration-200 dark:border-slate-800 dark:bg-slate-800">
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white/90 shadow-glow-lg backdrop-blur-sm transition-colors duration-200 dark:border-slate-700/90 dark:bg-slate-900/80">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-100 transition-colors duration-200 dark:bg-slate-900">
-              <tr className="border-b border-slate-200 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+            <thead className="bg-gradient-to-b from-slate-100 to-slate-50/90 dark:from-slate-900 dark:to-slate-950/90">
+              <tr className="border-b border-slate-200/90 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:border-slate-700 dark:text-slate-400">
                 <th className="px-4 py-2" colSpan={7}>
                   Basic Info
                 </th>
@@ -481,8 +482,8 @@ function LeadsTable({ leads, loading, loadingStage }) {
               {leads.map((lead, index) => (
                 <tr
                   key={`${lead.name}-${index}`}
-                  className={`border-t border-slate-100 transition-colors duration-200 hover:bg-gray-100 dark:border-slate-700 dark:hover:bg-gray-800 ${
-                    lead.isHotLead ? "bg-amber-50/40 dark:bg-amber-950/20" : ""
+                  className={`border-t border-slate-100/90 transition-colors duration-200 hover:bg-indigo-50/40 dark:border-slate-800 dark:hover:bg-slate-800/80 ${
+                    lead.isHotLead ? "bg-amber-50/50 dark:bg-amber-950/25" : ""
                   }`}
                 >
                   <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100">
