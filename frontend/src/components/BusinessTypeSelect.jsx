@@ -8,12 +8,13 @@ function BusinessTypeSelect({ value, onChange }) {
   return (
     <SearchableSelect
       label="Business Type"
-      placeholder="Search business type (e.g., Dental Clinic, Salon)"
+      placeholder="Search or type business type (e.g., Dental Clinic, Dog Grooming)"
       options={options}
       value={value}
       onChange={onChange}
       required
       showCategory
+      allowCustomValue
     />
   );
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import requests
@@ -38,19 +39,58 @@ class GooglePlacesService:
         print("API KEY present")
         return True
 
-    def search_businesses(self, query: str) -> list[dict[str, Any]]:
+    def search_businesses(self, query: str, max_results: int = 300) -> list[dict[str, Any]]:
         """Run Places Text Search and return normalized place records."""
         if not self._ensure_api_key():
             return []
-        params = {"query": query, "key": self._settings.google_places_api_key}
-        payload = self._safe_request(self._settings.google_places_text_search_url, params)
-        if not payload:
+        if max_results <= 0:
             return []
-        api_status = payload.get("status", "UNKNOWN")
-        if api_status not in {"OK", "ZERO_RESULTS"}:
-            print(f"Bad status: {api_status}")
-            return []
-        return payload.get("results", [])
+
+        all_results: list[dict[str, Any]] = []
+        seen_place_ids: set[str] = set()
+        next_page_token: str | None = None
+
+        while len(all_results) < max_results:
+            params = {"key": self._settings.google_places_api_key}
+            if next_page_token:
+                # Google requires a short delay before next_page_token becomes valid.
+                time.sleep(2)
+                params["pagetoken"] = next_page_token
+            else:
+                params["query"] = query
+
+            payload = self._safe_request(self._settings.google_places_text_search_url, params)
+            if not payload:
+                break
+
+            api_status = payload.get("status", "UNKNOWN")
+            if api_status == "INVALID_REQUEST" and next_page_token:
+                # token may still be warming up; retry once
+                time.sleep(1)
+                payload = self._safe_request(self._settings.google_places_text_search_url, params)
+                if not payload:
+                    break
+                api_status = payload.get("status", "UNKNOWN")
+
+            if api_status not in {"OK", "ZERO_RESULTS"}:
+                print(f"Bad status: {api_status}")
+                break
+
+            for result in payload.get("results", []):
+                place_id = (result.get("place_id") or "").strip()
+                if place_id and place_id in seen_place_ids:
+                    continue
+                if place_id:
+                    seen_place_ids.add(place_id)
+                all_results.append(result)
+                if len(all_results) >= max_results:
+                    break
+
+            next_page_token = payload.get("next_page_token")
+            if not next_page_token:
+                break
+
+        return all_results[:max_results]
 
     def get_place_details(self, place_id: str) -> dict[str, Any]:
         """Fetch details used to enrich lead output."""

@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 class LeadService:
     """Coordinates search, processing, and enrichment of lead data."""
 
-    MAX_RESULTS_CEILING = 15
+    MAX_RESULTS_CEILING = 600
+    MAX_QUERY_VARIATIONS = 5
 
     def __init__(
         self,
@@ -38,25 +39,48 @@ class LeadService:
         self._social_discovery_service = social_discovery_service
         self._analyzer_service = analyzer_service
 
-    async def search(self, city: str, business_type: str, country: str | None = None) -> list[Lead]:
-        """Search and process leads from Google Places."""
+    async def search(
+        self,
+        city: str,
+        business_type: str,
+        country: str | None = None,
+        offset: int = 0,
+        limit: int = 150,
+    ) -> tuple[list[Lead], int, bool]:
+        """Search and process paginated leads from Google Places."""
         location_suffix = f", {country}" if country else ""
-        query = f"{business_type} in {city}{location_suffix}"
+        query_variations = self._build_query_variations(
+            business_type=business_type,
+            city=city,
+            country_suffix=location_suffix,
+        )
 
-        places = self._places_service.search_businesses(query=query)
+        safe_offset = max(0, offset)
+        safe_limit = max(1, min(limit, 300))
+        target_count = min(self.MAX_RESULTS_CEILING, safe_offset + safe_limit)
+        # Fetch more than one page target to mitigate sparse/overlapping query variants.
+        per_query_max = min(300, max(60, target_count))
+        places = self._collect_places_from_variations(
+            queries=query_variations,
+            per_query_max=per_query_max,
+            overall_max=self.MAX_RESULTS_CEILING,
+        )
         filtered_places = self._filter_relevant_places(
             places=places,
             city=city,
             country=country,
         )
-        max_results = max(1, min(self._settings.lead_max_results, self.MAX_RESULTS_CEILING))
-        limited_places = filtered_places[:max_results]
+        paged_places = filtered_places[safe_offset : safe_offset + safe_limit]
+        has_more = (safe_offset + safe_limit) < len(filtered_places)
         logger.info(
-            "Lead search for query '%s' returned %s places, %s after filtering, %s after limiting.",
-            query,
+            "Lead search returned %s places across %s query variants, %s filtered, offset=%s, limit=%s, page_size=%s, has_more=%s.",
             len(places),
+            len(query_variations),
             len(filtered_places),
-            len(limited_places),
+            safe_offset,
+            safe_limit,
+            len(paged_places),
+            has_more,
         )
 
         semaphore = asyncio.Semaphore(self._settings.scraper_max_concurrency)
@@ -67,11 +91,61 @@ class LeadService:
                 business_type=business_type,
                 semaphore=semaphore,
             )
-            for place in limited_places
+            for place in paged_places
         ]
         leads = [lead for lead in await asyncio.gather(*tasks) if lead is not None]
+        enriched = await self._analyzer_service.enrich(leads)
+        return enriched, len(filtered_places), has_more
 
-        return await self._analyzer_service.enrich(leads)
+    def _build_query_variations(self, business_type: str, city: str, country_suffix: str) -> list[str]:
+        base = f"{business_type} in {city}{country_suffix}"
+        near = f"{business_type} near {city}{country_suffix}"
+        center = f"{business_type} in {city} center{country_suffix}"
+        downtown = f"{business_type} in {city} downtown{country_suffix}"
+        area = f"{business_type} in {city} area{country_suffix}"
+        candidates = [base, near, center, downtown, area]
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for query in candidates:
+            normalized = query.strip().lower()
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(query)
+            if len(deduped) >= self.MAX_QUERY_VARIATIONS:
+                break
+        return deduped
+
+    def _collect_places_from_variations(
+        self,
+        queries: list[str],
+        per_query_max: int,
+        overall_max: int,
+    ) -> list[dict]:
+        combined: list[dict] = []
+        seen_place_ids: set[str] = set()
+        seen_fallback_keys: set[str] = set()
+
+        for query in queries:
+            places = self._places_service.search_businesses(query=query, max_results=per_query_max)
+            for place in places:
+                place_id = (place.get("place_id") or "").strip().lower()
+                if place_id:
+                    if place_id in seen_place_ids:
+                        continue
+                    seen_place_ids.add(place_id)
+                else:
+                    fallback_key = (
+                        f"{(place.get('name') or '').strip().lower()}|"
+                        f"{(place.get('formatted_address') or '').strip().lower()}"
+                    )
+                    if fallback_key in seen_fallback_keys:
+                        continue
+                    seen_fallback_keys.add(fallback_key)
+                combined.append(place)
+                if len(combined) >= overall_max:
+                    return combined
+        return combined
 
     async def _build_lead(
         self,
@@ -128,6 +202,7 @@ class LeadService:
 
         lead = Lead(
             name=place.get("name", "Unknown"),
+            place_id=place_id,
             address=place.get("formatted_address"),
             phone_number=phone_number,
             website=website,

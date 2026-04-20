@@ -36,6 +36,12 @@ const buildQuery = (params) => {
   const searchParams = new URLSearchParams();
   searchParams.set("city", params.city);
   searchParams.set("type", params.type);
+  if (typeof params.offset === "number") {
+    searchParams.set("offset", String(params.offset));
+  }
+  if (typeof params.limit === "number") {
+    searchParams.set("limit", String(params.limit));
+  }
   if (params.country) {
     searchParams.set("country", params.country);
   }

@@ -10,6 +10,7 @@ function SearchableSelect({
   required = false,
   loading = false,
   showCategory = false,
+  allowCustomValue = false,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -75,9 +76,20 @@ function SearchableSelect({
   );
 
   const handleInputChange = useCallback((event) => {
-    setQuery(event.target.value);
+    const nextValue = event.target.value;
+    setQuery(nextValue);
+    if (allowCustomValue) {
+      onChange(nextValue);
+    }
     if (!open) setOpen(true);
-  }, [open]);
+  }, [allowCustomValue, onChange, open]);
+
+  const handleBlurCommit = useCallback(() => {
+    if (!allowCustomValue) {
+      return;
+    }
+    onChange(query.trim());
+  }, [allowCustomValue, onChange, query]);
 
   const handleSelect = useCallback((option) => {
     onChange(option.value);
@@ -94,6 +106,7 @@ function SearchableSelect({
         value={open ? query : selectedLabel}
         onChange={handleInputChange}
         onFocus={() => setOpen(true)}
+        onBlur={handleBlurCommit}
         disabled={disabled}
         placeholder={placeholder}
         aria-expanded={open}

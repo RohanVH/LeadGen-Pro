@@ -11,6 +11,7 @@ class Lead(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     name: str
+    place_id: str | None = Field(default=None, alias="placeId")
     address: str | None = None
     phone_number: str | None = Field(default=None, alias="phoneNumber")
     website: str | None = None
@@ -48,3 +49,4 @@ class LeadSearchResponse(BaseModel):
 
     total: int
     leads: list[Lead]
+    has_more: bool = Field(alias="hasMore")

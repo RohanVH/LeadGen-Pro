@@ -21,16 +21,20 @@ async def search_leads(
     city: str = Query(..., min_length=2, max_length=120),
     type: str = Query(..., min_length=2, max_length=120),
     country: str | None = Query(default=None, min_length=2, max_length=120),
+    offset: int = Query(default=0, ge=0),
+    limit: int = Query(default=150, ge=1, le=300),
     lead_service: LeadService = Depends(get_lead_service),
 ) -> LeadSearchResponse:
     """Search leads by city and business type."""
-    params = LeadSearchParams(city=city, type=type, country=country)
-    leads = await lead_service.search(
+    params = LeadSearchParams(city=city, type=type, country=country, offset=offset, limit=limit)
+    leads, total, has_more = await lead_service.search(
         city=params.city,
         business_type=params.business_type,
         country=params.country,
+        offset=params.offset,
+        limit=params.limit,
     )
-    return LeadSearchResponse(total=len(leads), leads=leads)
+    return LeadSearchResponse(total=total, leads=leads, hasMore=has_more)
 
 
 @router.get("/export")
@@ -42,10 +46,12 @@ async def export_leads_csv(
 ) -> StreamingResponse:
     """Export searched leads as CSV."""
     params = LeadSearchParams(city=city, type=type, country=country)
-    leads = await lead_service.search(
+    leads, _, _ = await lead_service.search(
         city=params.city,
         business_type=params.business_type,
         country=params.country,
+        offset=0,
+        limit=300,
     )
     csv_content = leads_to_csv(leads)
 

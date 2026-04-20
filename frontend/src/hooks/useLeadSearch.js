@@ -2,12 +2,16 @@ import { useMemo, useState } from "react";
 import { searchLeads } from "../services/leadService";
 
 const DEFAULT_ERROR_MESSAGE = "Something went wrong. Please try again.";
+const PAGE_SIZE = 150;
 
 export function useLeadSearch() {
   const [query, setQuery] = useState({ city: "", type: "", country: "" });
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadingStage, setLoadingStage] = useState("");
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
@@ -46,6 +50,22 @@ export function useLeadSearch() {
     return { highPriority, emailsFound, hotLeads };
   }, [leads]);
 
+  const mergeUniqueLeads = (existingLeads, incomingLeads) => {
+    const seen = new Set(
+      existingLeads.map((lead) => lead.placeId || `${lead.name}-${lead.phoneNumber || ""}-${lead.email || ""}`)
+    );
+    const additions = [];
+    for (const lead of incomingLeads) {
+      const key = lead.placeId || `${lead.name}-${lead.phoneNumber || ""}-${lead.email || ""}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      additions.push(lead);
+    }
+    return [...existingLeads, ...additions];
+  };
+
   const submitSearch = async (nextQuery) => {
     if (loading) {
       return;
@@ -60,12 +80,16 @@ export function useLeadSearch() {
     }, 1200);
 
     try {
-      const data = await searchLeads(nextQuery);
+      const data = await searchLeads({ ...nextQuery, offset: 0, limit: PAGE_SIZE });
       setLeads(data.leads ?? []);
       setTotal(data.total ?? 0);
+      setOffset((data.leads ?? []).length);
+      setHasMore(Boolean(data.hasMore));
     } catch (err) {
       setLeads([]);
       setTotal(0);
+      setOffset(0);
+      setHasMore(false);
       setError(err.message || DEFAULT_ERROR_MESSAGE);
     } finally {
       window.clearTimeout(analysisTimer);
@@ -74,11 +98,38 @@ export function useLeadSearch() {
     }
   };
 
+  const loadMore = async () => {
+    if (loading || loadingMore || !hasMore || !query.city || !query.type) {
+      return;
+    }
+
+    setLoadingMore(true);
+    setError("");
+    try {
+      const data = await searchLeads({
+        ...query,
+        offset,
+        limit: PAGE_SIZE,
+      });
+      const newLeads = data.leads ?? [];
+      setLeads((prev) => mergeUniqueLeads(prev, newLeads));
+      setOffset((prev) => prev + newLeads.length);
+      setHasMore(Boolean(data.hasMore));
+      setTotal((prev) => (typeof data.total === "number" ? data.total : prev));
+    } catch (err) {
+      setError(err.message || DEFAULT_ERROR_MESSAGE);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   return {
     query,
     leads,
     filteredLeads,
     total,
+    hasMore,
+    loadingMore,
     loading,
     loadingStage,
     error,
@@ -87,6 +138,7 @@ export function useLeadSearch() {
     hotLeadsOnly,
     setHotLeadsOnly,
     submitSearch,
+    loadMore,
     stats,
   };
 }
