@@ -1,7 +1,8 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 function SearchableSelect({
   label,
+  name,
   placeholder,
   options,
   value,
@@ -15,6 +16,8 @@ function SearchableSelect({
   suggestionResolver = null,
   hint = "",
 }) {
+  const baseId = useId();
+  const inputId = `${baseId}-input`;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -115,10 +118,16 @@ function SearchableSelect({
 
   return (
     <div ref={rootRef} className="relative">
-      <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label
+        htmlFor={inputId}
+        className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+      >
         {label} {required ? <span className="text-rose-600">*</span> : null}
       </label>
       <input
+        id={inputId}
+        name={name || undefined}
+        autoComplete="off"
         value={open ? query : selectedLabel}
         onChange={handleInputChange}
         onFocus={() => setOpen(true)}

@@ -12,6 +12,34 @@ from app.core.config import Settings
 logger = logging.getLogger(__name__)
 
 
+def _coerce_to_object(parsed: Any) -> dict[str, Any] | None:
+    """Ensure provider output is a single JSON object (OpenAI/Gemini sometimes wrap or mis-shape)."""
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], dict):
+        return parsed[0]
+    return None
+
+
+def _parse_json_object_from_text(text: str | None) -> dict[str, Any] | None:
+    """Parse JSON from model text; strip markdown fences; return None if not a dict."""
+    if not text or not str(text).strip():
+        return None
+    stripped = str(text).strip()
+    if stripped.startswith("```"):
+        lines = stripped.split("\n")
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    return _coerce_to_object(parsed)
+
+
 class AIRouterService:
     """Route AI analysis across OpenAI, Gemini, and rule-based fallback."""
 
@@ -37,6 +65,10 @@ class AIRouterService:
 
         print("Using fallback")
         logger.warning("AI analyze fallback triggered after provider failures.")
+        return self._normalize(self._rule_based_fallback(lead_input), lead_input)
+
+    def normalized_rule_based_fallback(self, lead_input: dict[str, Any]) -> dict[str, Any]:
+        """Deterministic analysis when providers fail or callers need a safe fallback."""
         return self._normalize(self._rule_based_fallback(lead_input), lead_input)
 
     async def _try_openai(self, prompt: str) -> dict[str, Any] | None:
@@ -69,7 +101,11 @@ class AIRouterService:
                 )
                 response.raise_for_status()
                 content = response.json()["choices"][0]["message"]["content"]
-                return json.loads(content)
+                parsed = _parse_json_object_from_text(content)
+                if parsed is None:
+                    logger.warning("OpenAI returned non-object JSON; trying Gemini.")
+                    return None
+                return parsed
         except Exception as exc:
             logger.warning("OpenAI provider failed, trying Gemini.", exc_info=exc)
             return None
@@ -92,7 +128,11 @@ class AIRouterService:
                 response.raise_for_status()
                 data = response.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
-                return json.loads(text)
+                parsed = _parse_json_object_from_text(text)
+                if parsed is None:
+                    logger.warning("Gemini returned non-object JSON; using fallback.")
+                    return None
+                return parsed
         except Exception as exc:
             logger.warning("Gemini provider failed, using fallback.", exc_info=exc)
             return None
@@ -104,6 +144,7 @@ class AIRouterService:
         rating = lead_input.get("rating")
         review_count = int(lead_input.get("review_count") or 0)
         reviews = lead_input.get("google_reviews") or []
+        review_snippets = " | ".join(str(r) for r in reviews[:4] if str(r).strip()) if reviews else "not available"
         return (
             "Analyze this business lead and decide if it is worth contacting.\n\n"
             f"Business name: {name}\n"
@@ -111,7 +152,7 @@ class AIRouterService:
             f"Website content: {website_content}\n"
             f"Rating: {rating if rating is not None else 'not available'}\n"
             f"Review count: {review_count}\n"
-            f"Google reviews: {' | '.join(reviews[:4]) if reviews else 'not available'}\n\n"
+            f"Google reviews: {review_snippets}\n\n"
             "Output JSON with this exact structure:\n"
             "{"
             '"summary":"...",'
@@ -124,6 +165,10 @@ class AIRouterService:
         )
 
     def _normalize(self, output: dict[str, Any], lead_input: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(output, dict):
+            logger.warning("AI output was type %s, not dict; using rule-based fallback.", type(output).__name__)
+            return self._normalize(self._rule_based_fallback(lead_input), lead_input)
+
         summary = str(output.get("summary") or "").strip()
         pros = [str(item).strip() for item in (output.get("pros") or []) if str(item).strip()]
         cons = [str(item).strip() for item in (output.get("cons") or []) if str(item).strip()]

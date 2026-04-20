@@ -8,6 +8,7 @@ function CountrySelect({ value, onChange }) {
   return (
     <SearchableSelect
       label="Country"
+      name="country"
       placeholder="Select country"
       options={options}
       value={value}

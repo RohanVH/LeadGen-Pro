@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LeadAnalyzeRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str
     business_type: str = Field(alias="businessType")
     website_content: str | None = Field(default=None, alias="websiteContent")
@@ -14,6 +16,8 @@ class LeadAnalyzeRequest(BaseModel):
 
 
 class LeadAnalyzeResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     overview: str
     strengths: list[str]
     weaknesses: list[str]
@@ -29,6 +33,8 @@ class LeadChatMessage(BaseModel):
 
 
 class LeadContext(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     name: str
     business_type: str = Field(alias="businessType")
     website_content: str | None = Field(default=None, alias="websiteContent")
@@ -39,6 +45,8 @@ class LeadContext(BaseModel):
 
 
 class LeadChatRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     previous_conversation: list[LeadChatMessage] = Field(default_factory=list, alias="previousConversation")
     messages: list[LeadChatMessage] = Field(default_factory=list)
     message: str = ""

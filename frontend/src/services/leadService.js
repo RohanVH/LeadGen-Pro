@@ -14,6 +14,26 @@ async function parseJsonSafely(response) {
   }
 }
 
+function formatApiErrorMessage(payload) {
+  if (!payload || payload.detail == null) {
+    return "Something went wrong. Please try again.";
+  }
+  const { detail } = payload;
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (item && typeof item === "object" && item.msg) {
+        return item.msg;
+      }
+      return String(item);
+    });
+    return parts.filter(Boolean).join(" ") || "Something went wrong. Please try again.";
+  }
+  return "Something went wrong. Please try again.";
+}
+
 async function apiRequest(path, options = {}) {
   let response;
 
@@ -26,7 +46,7 @@ async function apiRequest(path, options = {}) {
   const payload = await parseJsonSafely(response);
 
   if (!response.ok) {
-    throw new Error(payload.detail || "Something went wrong. Please try again.");
+    throw new Error(formatApiErrorMessage(payload));
   }
 
   return payload;

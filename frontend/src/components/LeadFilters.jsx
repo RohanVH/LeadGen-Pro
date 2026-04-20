@@ -1,4 +1,7 @@
+import { useId } from "react";
+
 function LeadFilters({ filter, onChange, hotLeadsOnly, onToggleHotLeads }) {
+  const hotToggleLabelId = `${useId()}-hot-only-label`;
   const items = [
     { label: "All Leads", value: "all" },
     { label: "High Priority", value: "high-priority" },
@@ -37,11 +40,18 @@ function LeadFilters({ filter, onChange, hotLeadsOnly, onToggleHotLeads }) {
         ))}
       </div>
 
-      <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-amber-200/90 bg-gradient-to-r from-amber-50 to-amber-50/30 px-3 py-1.5 shadow-sm dark:border-amber-900/50 dark:from-amber-950/40 dark:to-amber-950/20">
-        <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">Hot only</span>
+      <div
+        className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-amber-200/90 bg-gradient-to-r from-amber-50 to-amber-50/30 px-3 py-1.5 shadow-sm dark:border-amber-900/50 dark:from-amber-950/40 dark:to-amber-950/20"
+        role="group"
+        aria-label="Show hot leads only"
+      >
+        <span className="text-sm font-semibold text-amber-900 dark:text-amber-200" id={hotToggleLabelId}>
+          Hot only
+        </span>
         <button
           type="button"
           aria-pressed={hotLeadsOnly}
+          aria-labelledby={hotToggleLabelId}
           onClick={() => onToggleHotLeads(!hotLeadsOnly)}
           className={`relative h-6 w-11 rounded-full transition-colors duration-200 ${
             hotLeadsOnly ? "bg-amber-500 shadow-inner" : "bg-slate-300 dark:bg-slate-600"
@@ -53,7 +63,7 @@ function LeadFilters({ filter, onChange, hotLeadsOnly, onToggleHotLeads }) {
             }`}
           />
         </button>
-      </label>
+      </div>
     </div>
   );
 }

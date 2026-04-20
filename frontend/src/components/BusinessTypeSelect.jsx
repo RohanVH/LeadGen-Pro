@@ -95,6 +95,7 @@ function BusinessTypeSelect({ category, onCategoryChange, value, onChange }) {
     <div className="grid gap-4 sm:grid-cols-2">
       <SearchableSelect
         label="Category"
+        name="businessCategory"
         placeholder="Select business category"
         options={categoryOptions}
         value={category}
@@ -104,6 +105,7 @@ function BusinessTypeSelect({ category, onCategoryChange, value, onChange }) {
       <div>
         <SearchableSelect
           label="Sub-type"
+          name="businessSubtype"
           placeholder={
             category ? "Select or type sub-type (e.g. cafe, dental clinic)" : "Select category first"
           }

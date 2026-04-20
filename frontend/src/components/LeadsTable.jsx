@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   buildWhatsAppLink,
   generateOutreachMessage,
@@ -151,6 +151,7 @@ function LeadAssistantModal({
   onSendChat,
   chatLoading,
 }) {
+  const chatInputId = `${useId()}-lead-assistant-chat`;
   if (!open || !lead) return null;
 
   return (
@@ -221,7 +222,9 @@ function LeadAssistantModal({
           </section>
 
           <section className="flex min-h-[380px] flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
-            <h4 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Chat</h4>
+            <label htmlFor={chatInputId} className="mb-2 block text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Chat
+            </label>
             <div className="mb-3 flex-1 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
               {chatMessages.length ? (
                 chatMessages.map((msg, idx) => (
@@ -245,7 +248,10 @@ function LeadAssistantModal({
             </div>
             <div className="flex gap-2">
               <input
+                id={chatInputId}
+                name="leadAssistantChat"
                 type="text"
+                autoComplete="off"
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
                 onKeyDown={(event) => {

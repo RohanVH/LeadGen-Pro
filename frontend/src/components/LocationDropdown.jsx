@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   fetchLocationDetails,
   fetchLocationSuggestions,
@@ -25,6 +25,8 @@ function LocationDropdown({ country, value, onChange }) {
   const searchCacheRef = useRef(new Map());
   const popularCacheRef = useRef(new Map());
   const detailsCacheRef = useRef(new Map());
+  const baseId = useId();
+  const locationInputId = `${baseId}-location`;
 
   const displayValue = useMemo(() => {
     if (open) {
@@ -230,10 +232,16 @@ function LocationDropdown({ country, value, onChange }) {
 
   return (
     <div ref={rootRef} className="relative">
-      <label className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200">
+      <label
+        htmlFor={locationInputId}
+        className="mb-1 block text-sm font-semibold text-slate-700 dark:text-slate-200"
+      >
         Location <span className="text-rose-600">*</span>
       </label>
       <input
+        id={locationInputId}
+        name="location"
+        autoComplete="off"
         value={displayValue}
         onChange={handleInputChange}
         onFocus={() => setOpen(true)}

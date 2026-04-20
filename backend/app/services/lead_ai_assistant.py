@@ -26,16 +26,19 @@ class LeadAIAssistantService:
     async def analyze(self, payload: LeadAnalyzeRequest) -> LeadAnalyzeResponse:
         """Generate a structured analysis for a lead."""
         logger.info("Lead analyze request payload: %s", payload.model_dump(by_alias=True))
-        normalized = await self._ai_router.analyze_business(
-            {
-                "name": payload.name,
-                "business_type": payload.business_type,
-                "website_content": payload.website_content,
-                "rating": payload.rating,
-                "review_count": len(payload.reviews),
-                "google_reviews": payload.reviews,
-            }
-        )
+        lead_input = {
+            "name": payload.name,
+            "business_type": payload.business_type,
+            "website_content": payload.website_content,
+            "rating": payload.rating,
+            "review_count": len(payload.reviews),
+            "google_reviews": payload.reviews,
+        }
+        try:
+            normalized = await self._ai_router.analyze_business(lead_input)
+        except Exception:
+            logger.exception("Lead analyze failed; using rule-based fallback.")
+            normalized = self._ai_router.normalized_rule_based_fallback(lead_input)
         logger.info("Lead analyze normalized AI response: %s", normalized)
         return LeadAnalyzeResponse(
             overview=str(normalized.get("summary") or ""),
