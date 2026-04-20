@@ -5,6 +5,7 @@ import {
   generateOutreachSubject,
   sendLeadEmail,
 } from "../services/outreachService";
+import { analyzeLead, chatWithLeadAssistant } from "../services/leadService";
 
 function PriorityBadge({ value }) {
   const className =
@@ -124,12 +125,156 @@ function WhatsAppIcon() {
   );
 }
 
+function SocialLink({ href, label }) {
+  if (!href) return <span className="text-slate-400">-</span>;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="font-semibold text-indigo-600 underline-offset-2 transition-colors duration-200 hover:text-indigo-700 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
+    >
+      {label}
+    </a>
+  );
+}
+
+function LeadAssistantModal({
+  lead,
+  open,
+  onClose,
+  analysis,
+  analysisLoading,
+  chatMessages,
+  chatInput,
+  setChatInput,
+  onSendChat,
+  chatLoading,
+}) {
+  if (!open || !lead) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Lead AI Assistant</h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{lead.name}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="grid max-h-[78vh] gap-4 overflow-y-auto p-5 lg:grid-cols-2">
+          <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">AI Analysis</h4>
+            {analysisLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-800" />
+                Running analysis...
+              </div>
+            ) : analysis ? (
+              <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
+                <div>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">Overview</p>
+                  <p>{analysis.overview}</p>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">Strengths</p>
+                  <ul className="space-y-1">
+                    {(analysis.strengths || []).map((item, idx) => (
+                      <li key={idx}>+ {item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900 dark:text-slate-100">Weaknesses</p>
+                  <ul className="space-y-1">
+                    {(analysis.weaknesses || []).map((item, idx) => (
+                      <li key={idx}>- {item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <p>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">Customer perception:</span>{" "}
+                  {analysis.customerPerception}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">What to sell:</span>{" "}
+                  {analysis.whatToSell}
+                </p>
+                <p>
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">Outreach angle:</span>{" "}
+                  {analysis.outreachAngle}
+                </p>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="flex min-h-[380px] flex-col rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/60">
+            <h4 className="mb-2 text-sm font-semibold text-slate-900 dark:text-slate-100">Chat</h4>
+            <div className="mb-3 flex-1 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900">
+              {chatMessages.length ? (
+                chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`rounded-lg px-3 py-2 text-xs ${
+                      msg.role === "user"
+                        ? "ml-8 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-200"
+                        : "mr-8 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    }`}
+                  >
+                    {msg.content}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-400">Ask about objections, pricing angle, offer positioning, or next best step.</p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") onSendChat();
+                }}
+                placeholder="Ask AI: what should I pitch first?"
+                className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-indigo-400 focus:ring-2 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+              />
+              <button
+                type="button"
+                onClick={onSendChat}
+                disabled={!chatInput.trim() || chatLoading}
+                className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-indigo-300"
+              >
+                {chatLoading ? "Sending..." : "Send"}
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LeadsTable({ leads, loading, loadingStage }) {
   const [sentStatus, setSentStatus] = useState({});
   const [sendingRows, setSendingRows] = useState({});
   const [messageCache, setMessageCache] = useState({});
   const [toast, setToast] = useState(null);
   const [rowStatus, setRowStatus] = useState({});
+  const [activeLead, setActiveLead] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisCache, setAnalysisCache] = useState({});
+  const [chatByLead, setChatByLead] = useState({});
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
     if (!toast) {
@@ -193,6 +338,68 @@ function LeadsTable({ leads, loading, loadingStage }) {
     window.open(whatsappUrl, "_blank", "noopener,noreferrer");
   };
 
+  const handleOpenAssistant = async (lead, index) => {
+    const leadKey = getLeadKey(lead, index);
+    setActiveLead({ ...lead, leadKey });
+    setChatInput("");
+
+    if (analysisCache[leadKey]) {
+      return;
+    }
+
+    setAnalysisLoading(true);
+    try {
+      const result = await analyzeLead({
+        name: lead.name,
+        businessType: lead.businessType || "business",
+        websiteContent: lead.websiteContent || "",
+        rating: lead.rating || null,
+        reviews: lead.googleReviews || [],
+      });
+      setAnalysisCache((prev) => ({ ...prev, [leadKey]: result }));
+    } catch (error) {
+      setToast({ type: "error", message: error.message || "Analysis failed." });
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  const handleSendChat = async () => {
+    if (!activeLead || !chatInput.trim()) return;
+
+    const leadKey = activeLead.leadKey;
+    const currentMessages = chatByLead[leadKey] || [];
+    const nextUserMessage = { role: "user", content: chatInput.trim() };
+    const nextMessages = [...currentMessages, nextUserMessage];
+    setChatByLead((prev) => ({ ...prev, [leadKey]: nextMessages }));
+    setChatInput("");
+    setChatLoading(true);
+    try {
+      const analysis = analysisCache[leadKey];
+      const response = await chatWithLeadAssistant({
+        previousConversation: nextMessages,
+        message: nextUserMessage.content,
+        leadContext: {
+          name: activeLead.name,
+          businessType: activeLead.businessType || "business",
+          websiteContent: activeLead.websiteContent || "",
+          rating: activeLead.rating || null,
+          reviews: activeLead.googleReviews || [],
+          overview: analysis?.overview || "",
+          whatToSell: analysis?.whatToSell || "",
+        },
+      });
+      setChatByLead((prev) => ({
+        ...prev,
+        [leadKey]: [...(prev[leadKey] || nextMessages), { role: "assistant", content: response.response }],
+      }));
+    } catch (error) {
+      setToast({ type: "error", message: error.message || "Chat failed." });
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-gray-50 p-10 text-center text-sm text-slate-600 shadow-card transition-colors duration-200 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-300">
@@ -218,10 +425,10 @@ function LeadsTable({ leads, loading, loadingStage }) {
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 transition-colors duration-200 dark:bg-slate-900">
               <tr className="border-b border-slate-200 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                <th className="px-4 py-2" colSpan={5}>
+                <th className="px-4 py-2" colSpan={7}>
                   Basic Info
                 </th>
-                <th className="px-4 py-2" colSpan={5}>
+                <th className="px-4 py-2" colSpan={3}>
                   Business Insights
                 </th>
                 <th className="px-4 py-2" colSpan={3}>
@@ -236,11 +443,11 @@ function LeadsTable({ leads, loading, loadingStage }) {
                 <HeaderCell title="Phone" helper="Primary contact number if available" />
                 <HeaderCell title="Email" helper="Best email found across website pages" />
                 <HeaderCell title="Website" helper="Detected business website URL" />
+                <HeaderCell title="Instagram" helper="Discovered Instagram business profile" />
+                <HeaderCell title="YouTube" helper="Discovered YouTube business channel" />
                 <HeaderCell title="Confidence" helper="Data accuracy score based on available info" />
 
-                <HeaderCell title="Summary" helper="AI overview of current business presence" />
-                <HeaderCell title="Pros" helper="What the business appears to do well" />
-                <HeaderCell title="Cons" helper="Detected gaps or potential pain points" />
+                <HeaderCell title="Analysis" helper="Click to open AI sales assistant" />
                 <HeaderCell title="Sentiment" helper="Customer tone inferred from review signals" />
                 <HeaderCell title="Reviews" helper="Google rating and review count snapshot" />
 
@@ -312,36 +519,26 @@ function LeadsTable({ leads, loading, loadingStage }) {
                       "-"
                     )}
                   </td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                    <SocialLink href={lead.instagramUrl} label="View" />
+                  </td>
+                  <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                    <SocialLink href={lead.youtubeUrl} label="View" />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="space-y-1">
                       <EmailConfidenceBadge value={lead.emailConfidence || "LOW"} />
                       <div className="text-[10px] text-slate-400 dark:text-slate-500">{formatEmailType(lead.emailType)}</div>
                     </div>
                   </td>
-                  <td className="max-w-xs px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
-                    {lead.businessSummary || "Not available"}
-                  </td>
-                  <td className="max-w-[220px] px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
-                    {lead.pros?.length ? (
-                      <ul className="space-y-1">
-                        {lead.pros.slice(0, 2).map((item, idx) => (
-                          <li key={idx}>+ {item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      "-"
-                    )}
-                  </td>
-                  <td className="max-w-[220px] px-4 py-3 text-xs text-slate-700 dark:text-slate-300">
-                    {lead.cons?.length ? (
-                      <ul className="space-y-1">
-                        {lead.cons.slice(0, 2).map((item, idx) => (
-                          <li key={idx}>- {item}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      "-"
-                    )}
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAssistant(lead, index)}
+                      className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-200 dark:hover:bg-indigo-900/50"
+                    >
+                      Click to Analyze
+                    </button>
                   </td>
                   <td className="px-4 py-3">
                     <SentimentBadge value={lead.customerSentiment || "neutral"} />
@@ -397,6 +594,18 @@ function LeadsTable({ leads, loading, loadingStage }) {
           </table>
         </div>
       </div>
+      <LeadAssistantModal
+        lead={activeLead}
+        open={Boolean(activeLead)}
+        onClose={() => setActiveLead(null)}
+        analysis={activeLead ? analysisCache[activeLead.leadKey] : null}
+        analysisLoading={analysisLoading}
+        chatMessages={activeLead ? chatByLead[activeLead.leadKey] || [] : []}
+        chatInput={chatInput}
+        setChatInput={setChatInput}
+        onSendChat={handleSendChat}
+        chatLoading={chatLoading}
+      />
     </div>
   );
 }

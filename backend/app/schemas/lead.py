@@ -14,6 +14,8 @@ class Lead(BaseModel):
     address: str | None = None
     phone_number: str | None = Field(default=None, alias="phoneNumber")
     website: str | None = None
+    instagram_url: str | None = Field(default=None, alias="instagramUrl")
+    youtube_url: str | None = Field(default=None, alias="youtubeUrl")
     website_content: str | None = Field(default=None, alias="websiteContent")
     email: str | None = None
     email_source: str = Field(default="missing", alias="emailSource")

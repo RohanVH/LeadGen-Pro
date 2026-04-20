@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
     openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
+    gemini_api_key: str = Field(default="", validation_alias=AliasChoices("GEMINI_API_KEY", "gemini_api_key"))
+    gemini_model: str = Field(default="gemini-1.5-flash", alias="GEMINI_MODEL")
     ai_max_leads: int = Field(default=12, alias="AI_MAX_LEADS")
     ai_batch_size: int = Field(default=4, alias="AI_BATCH_SIZE")
     lead_max_results: int = Field(default=12, alias="LEAD_MAX_RESULTS")

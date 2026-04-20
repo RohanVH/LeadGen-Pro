@@ -62,6 +62,26 @@ return apiRequest("/outreach/send-email", {
   });
 }
 
+export async function analyzeLead(payload) {
+  return apiRequest("/v1/lead/analyze", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function chatWithLeadAssistant(payload) {
+  return apiRequest("/v1/lead/chat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchLocationSuggestions({ query, country }) {
   const searchParams = new URLSearchParams();
   searchParams.set("q", query);

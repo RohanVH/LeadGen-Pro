@@ -11,6 +11,7 @@ from app.schemas.lead import Lead
 from app.services.analyzer import LeadAnalyzerService
 from app.services.email_scraper import EmailScraperService
 from app.services.google_places import GooglePlacesService
+from app.services.social_discovery import SocialDiscoveryService
 from app.services.website_analyzer import WebsiteAnalyzerService
 
 logger = logging.getLogger(__name__)
@@ -27,12 +28,14 @@ class LeadService:
         places_service: GooglePlacesService,
         email_scraper_service: EmailScraperService,
         website_analyzer_service: WebsiteAnalyzerService,
+        social_discovery_service: SocialDiscoveryService,
         analyzer_service: LeadAnalyzerService,
     ) -> None:
         self._settings = settings
         self._places_service = places_service
         self._email_scraper_service = email_scraper_service
         self._website_analyzer_service = website_analyzer_service
+        self._social_discovery_service = social_discovery_service
         self._analyzer_service = analyzer_service
 
     async def search(self, city: str, business_type: str, country: str | None = None) -> list[Lead]:
@@ -111,6 +114,11 @@ class LeadService:
                 rating = float(raw_rating)
             except ValueError:
                 rating = None
+        async with semaphore:
+            instagram_url, youtube_url = await self._social_discovery_service.discover(
+                business_name=place.get("name", "Unknown"),
+                city=city,
+            )
         review_count = int(details.get("user_ratings_total") or place.get("user_ratings_total") or 0)
         google_reviews = [
             (review.get("text") or "").strip()
@@ -123,6 +131,8 @@ class LeadService:
             address=place.get("formatted_address"),
             phone_number=phone_number,
             website=website,
+            instagram_url=instagram_url,
+            youtube_url=youtube_url,
             email=email,
             email_type=email_type,
             email_source=email_source,
