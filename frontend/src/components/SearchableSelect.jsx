@@ -142,7 +142,7 @@ function SearchableSelect({
 
       <div
         role="listbox"
-        className={`absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg transition-colors duration-200 dark:border-slate-700 dark:bg-slate-900 ${
+        className={`absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg transition-colors duration-200 dark:border-slate-700 dark:bg-slate-900 ${
           open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         }`}
       >

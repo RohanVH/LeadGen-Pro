@@ -71,6 +71,7 @@ function LeadDashboardPage() {
       </div>
 
       <PageSection
+        className="relative z-30"
         eyebrow="Step 1"
         title="Search & targeting"
         description="Pick a category, refine the business type, then choose country and city."
@@ -79,6 +80,7 @@ function LeadDashboardPage() {
       </PageSection>
 
       <PageSection
+        className="relative z-0"
         eyebrow="Step 2"
         title="Filter & export"
         description="Narrow the list by priority or website quality, then export when you are ready."
