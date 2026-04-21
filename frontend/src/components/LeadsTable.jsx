@@ -10,10 +10,10 @@ import { analyzeLead, chatWithLeadAssistant } from "../services/leadService";
 function PriorityBadge({ value }) {
   const className =
     value === "HIGH"
-      ? "bg-red-50 text-accepthigh ring-1 ring-red-200"
+      ? "bg-red-50 text-red-700 ring-1 ring-red-200"
       : value === "MEDIUM"
         ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-        : "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200";
+        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
 
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${className}`}>{value}</span>;
 }
@@ -21,10 +21,10 @@ function PriorityBadge({ value }) {
 function WebsiteQualityBadge({ value }) {
   const className =
     value === "NO_WEBSITE"
-      ? "bg-red-50 text-accepthigh ring-1 ring-red-200"
+      ? "bg-red-50 text-red-700 ring-1 ring-red-200"
       : value === "WEAK_WEBSITE"
         ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
-        : "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200";
+        : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
 
   const label =
     value === "NO_WEBSITE"
@@ -39,7 +39,7 @@ function WebsiteQualityBadge({ value }) {
 function EmailConfidenceBadge({ value }) {
   const className =
     value === "HIGH"
-      ? "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200"
+      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
       : value === "MEDIUM"
         ? "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
         : "bg-slate-100 text-slate-600 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600";
@@ -50,9 +50,9 @@ function EmailConfidenceBadge({ value }) {
 function SentimentBadge({ value }) {
   const className =
     value === "positive"
-      ? "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200"
+      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
       : value === "negative"
-        ? "bg-red-50 text-accepthigh ring-1 ring-red-200"
+        ? "bg-red-50 text-red-700 ring-1 ring-red-200"
         : "bg-slate-100 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-700 dark:text-slate-200 dark:ring-slate-600";
 
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${className}`}>{value}</span>;
@@ -61,9 +61,9 @@ function SentimentBadge({ value }) {
 function RecommendationBadge({ value }) {
   const className =
     value === "contact"
-      ? "bg-emerald-50 text-acceptlow ring-1 ring-emerald-200"
+      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
       : value === "skip"
-        ? "bg-red-50 text-accepthigh ring-1 ring-red-200"
+        ? "bg-red-50 text-red-700 ring-1 ring-red-200"
         : "bg-amber-50 text-amber-700 ring-1 ring-amber-200";
 
   return <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${className}`}>{value}</span>;
@@ -189,7 +189,7 @@ function LeadAssistantModal({
                   <p className="font-semibold text-slate-900 dark:text-slate-100">Strengths</p>
                   <ul className="space-y-1">
                     {(analysis.strengths || []).map((item, idx) => (
-                      <li key={idx}>+ {item}</li>
+                      <li key={idx} >+ {item}</li>
                     ))}
                   </ul>
                 </div>
@@ -197,7 +197,7 @@ function LeadAssistantModal({
                   <p className="font-semibold text-slate-900 dark:text-slate-100">Weaknesses</p>
                   <ul className="space-y-1">
                     {(analysis.weaknesses || []).map((item, idx) => (
-                      <li key={idx}>- {item}</li>
+                      <li key={idx} >- {item}</li>
                     ))}
                   </ul>
                 </div>
@@ -362,13 +362,6 @@ function LeadsTable({ leads, loading, loadingStage }) {
 
     setAnalysisLoading(true);
     try {
-      console.log("Lead analyze request payload", {
-        name: lead.name,
-        type: lead.businessType || "business",
-        websiteContent: lead.websiteContent || "",
-        rating: lead.rating || null,
-        reviews: lead.googleReviews || [],
-      });
       const result = await analyzeLead({
         name: lead.name,
         businessType: lead.businessType || "business",
@@ -377,7 +370,6 @@ function LeadsTable({ leads, loading, loadingStage }) {
         rating: lead.rating ?? null,
         reviews: lead.googleReviews || [],
       });
-      console.log("Lead analyze response payload", result);
       setAnalysisCache((prev) => ({ ...prev, [leadKey]: result }));
     } catch (error) {
       setToast({ type: "error", message: error.message || "Analysis failed." });
@@ -414,11 +406,9 @@ function LeadsTable({ leads, loading, loadingStage }) {
           website: activeLead.website || null,
         },
       };
-      console.log("Lead chat request payload", chatPayload);
       const response = await chatWithLeadAssistant({
         ...chatPayload,
       });
-      console.log("Lead chat response payload", response);
       setChatByLead((prev) => ({
         ...prev,
         [leadKey]: [...(prev[leadKey] || nextMessages), { role: "assistant", content: response.response }],

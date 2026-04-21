@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ContactTimingIntelligence from "../contactTiming";
+import ContactTimingIntelligence from "../contactTiming.jsx";
 import { useEffect } from "react";
 
 function SearchForm({ onSearch, loading, loadingStage }) {
