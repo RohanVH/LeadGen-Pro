@@ -1,6 +1,7 @@
 import React from "react";
 import { getTimeData } from "../utils/timeUtils";
 import { getAISuggestion } from "../utils/aiSuggestion";
+import { getCountryInsight } from "../utils/countryInsights";
 
 const TimeInsights = ({ country, businessType, lat, lng }) => {
     const [, setTick] = React.useState(0);
@@ -17,6 +18,7 @@ const TimeInsights = ({ country, businessType, lat, lng }) => {
 
     const data = getTimeData({ country, lat, lng });
     const aiSuggestion = getAISuggestion(businessType, data.isBusinessTime);
+    const insight = getCountryInsight(country);
 
     if (!data) {
         return (
@@ -91,10 +93,28 @@ const TimeInsights = ({ country, businessType, lat, lng }) => {
                     </p>
                 )}
             </div>
-            <div className="mt-4 border-t border-gray-700 pt-3 text-sm">
-                <p className="text-indigo-400 font-semibold">🤖 AI Suggestion</p>
-                <p className="mt-1 text-gray-300 italic">
-                    {aiSuggestion}
+            <div className="mt-4 border-t border-gray-700 pt-3 text-sm space-y-1">
+                <p className="text-indigo-400 font-semibold">🤖 AI Market Insight</p>
+
+                <p>🌍 Mindset: {insight.mindset}</p>
+                <p>💰 Currency: {insight.currency}</p>
+                <p>
+                    📉 Strength:{" "}
+                    <span
+                        className={
+                            insight.strength === "Strong"
+                                ? "text-green-400"
+                                : insight.strength === "Moderate"
+                                    ? "text-yellow-400"
+                                    : "text-red-400"
+                        }
+                    >
+                        {insight.strength}
+                    </span>
+                </p>
+
+                <p className="mt-1 italic text-gray-300">
+                    💡 {insight.tip}
                 </p>
             </div>
         </div>
