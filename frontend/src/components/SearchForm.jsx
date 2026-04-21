@@ -1,159 +1,105 @@
-import { useCallback, useMemo, useState } from "react";
-import BusinessTypeSelect from "./BusinessTypeSelect";
-import CountrySelect from "./CountrySelect";
-import LocationDropdown from "./LocationDropdown";
-
-const initialForm = {
-  category: "",
-  city: "",
-  type: "",
-  country: "",
-  state: "",
-  lat: null,
-  lng: null,
-  displayName: "",
-  placeId: "",
-};
+import React, { useState } from "react";
+import ContactTimingIntelligence from "../contactTiming";
 
 function SearchForm({ onSearch, loading, loadingStage }) {
-  const [form, setForm] = useState(initialForm);
+  const [timingIntelligence] = useState(() => new ContactTimingIntelligence());
 
-  const setCategory = useCallback((category) => {
-    setForm((prev) => ({
-      ...prev,
-      category,
-      type: "",
-    }));
-  }, []);
-
-  const setType = useCallback((type) => {
-    setForm((prev) => ({ ...prev, type }));
-  }, []);
-
-  const setCountry = useCallback((country) => {
-    setForm((prev) => ({
-      ...prev,
-      country,
-      city: "",
-      state: "",
-      lat: null,
-      lng: null,
-      displayName: "",
-      placeId: "",
-    }));
-  }, []);
-
-  const setLocation = useCallback((location) => {
-    if (!location) {
-      setForm((prev) => ({
-        ...prev,
-        city: "",
-        state: "",
-        lat: null,
-        lng: null,
-        displayName: "",
-        placeId: "",
-      }));
-      return;
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      city: location.city || "",
-      state: location.state || "",
-      country: location.country || prev.country,
-      lat: location.lat,
-      lng: location.lng,
-      displayName: location.displayName || "",
-      placeId: location.placeId || "",
-    }));
-  }, []);
-
-  const onSubmit = (event) => {
-    event.preventDefault();
-    onSearch(form);
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const formData = new FormData(e.target);
+    const query = {
+      type: formData.get("type"),
+      country: formData.get("country"),
+      city: formData.get("city"),
+    };
+    onSearch(query);
   };
 
-  const canSearch = useMemo(() => {
-    return Boolean(form.category && form.type && form.country && form.city) && !loading;
-  }, [form.category, form.type, form.country, form.city, loading]);
-
   return (
-    <form
-      onSubmit={onSubmit}
-      className="relative grid gap-5 rounded-2xl border border-slate-200/90 bg-white/80 p-5 shadow-glow backdrop-blur-sm transition-colors duration-200 dark:border-slate-700/90 dark:bg-slate-900/70 sm:grid-cols-12 sm:p-6"
-    >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/40 to-transparent dark:via-indigo-500/30" />
-
-      <div className="sm:col-span-12">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-300 dark:ring-indigo-900/60" aria-hidden="true">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="11" cy="11" r="6" />
-                <path d="m20 20-3.5-3.5" />
-              </svg>
-            </span>
-            <div>
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Search criteria</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Category, location, and one click to run.</p>
-            </div>
-          </div>
-          <div
-            className={`min-h-[1.25rem] overflow-hidden text-xs font-semibold text-indigo-600 transition-all duration-300 dark:text-indigo-300 ${
-              loading ? "max-h-8 opacity-100" : "max-h-0 opacity-0"
-            }`}
-            aria-live="polite"
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
+        <div>
+          <label htmlFor="type" className="block text-sm font-medium text-slate-900 dark:text-white">
+            Category
+          </label>
+          <select
+            id="type"
+            name="type"
+            required
+            className="mt-1 block w-full pl-3 pr-10 py-2 border border-slate-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:focus:ring-indigo-500"
           >
-            {loadingStage || "Fetching leads..."}
-          </div>
+            <option value="">Select category</option>
+            <option value="Restaurant">Restaurant</option>
+            <option value="Hospital">Hospital</option>
+            <option value="Retail Store">Retail Store</option>
+            <option value="Hotel">Hotel</option>
+            <option value="School">School</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="country" className="block text-sm font-medium text-slate-900 dark:text-white">
+            Country
+          </label>
+          <select
+            id="country"
+            name="country"
+            required
+            className="mt-1 block w-full pl-3 pr-10 py-2 border border-slate-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:focus:ring-indigo-500"
+          >
+            <option value="">Select country</option>
+            <option value="United States">United States</option>
+            <option value="India">India</option>
+            <option value="United Kingdom">United Kingdom</option>
+            <option value="Canada">Canada</option>
+            <option value="Australia">Australia</option>
+            <option value="Germany">Germany</option>
+            <option value="France">France</option>
+            <option value="Japan">Japan</option>
+            <option value="China">China</option>
+            <option value="Brazil">Brazil</option>
+            <option value="Mexico">Mexico</option>
+            <option value="South Africa">South Africa</option>
+            <option value="Singapore">Singapore</option>
+            <option value="United Arab Emirates">United Arab Emirates</option>
+            <option value="Russia">Russia</option>
+            <option value="Italy">Italy</option>
+            <option value="Spain">Spain</option>
+            <option value="South Korea">South Korea</option>
+            <option value="Indonesia">Indonesia</option>
+            <option value="Thailand">Thailand</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="city" className="block text-sm font-medium text-slate-900 dark:text-white">
+            City
+          </label>
+          <input
+            type="text"
+            id="city"
+            name="city"
+            required
+            placeholder="Enter city"
+            className="mt-1 block w-full pl-3 pr-10 py-2 border border-slate-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white dark:focus:ring-indigo-500"
+          />
         </div>
       </div>
 
-      <div className="sm:col-span-5">
-        <BusinessTypeSelect
-          category={form.category}
-          onCategoryChange={setCategory}
-          value={form.type}
-          onChange={setType}
-        />
-      </div>
-
-      <div className="sm:col-span-2">
-        <CountrySelect value={form.country} onChange={setCountry} />
-      </div>
-
-      <div className="sm:col-span-4">
-        <LocationDropdown
-          country={form.country}
-          value={
-            form.placeId
-              ? {
-                  city: form.city,
-                  state: form.state,
-                  country: form.country,
-                  lat: form.lat,
-                  lng: form.lng,
-                  displayName: form.displayName,
-                  placeId: form.placeId,
-                }
-              : null
-          }
-          onChange={setLocation}
-        />
-      </div>
-
-      <div className="sm:col-span-1 sm:self-end">
+      <div className="flex justify-end">
         <button
           type="submit"
-          disabled={!canSearch}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-500/25 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300 disabled:shadow-none disabled:hover:translate-y-0 dark:disabled:bg-indigo-900"
+          disabled={loading}
+          className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-200 bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-500/20 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-700 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-300 disabled:shadow-none disabled:hover:translate-y-0 dark:border-indigo-500/30 dark:disabled:bg-slate-700"
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <circle cx="11" cy="11" r="6" />
-            <path d="m20 20-3.5-3.5" />
-          </svg>
-          {loading ? loadingStage || "Fetching leads..." : "Search"}
+          {loading ? (
+            <>
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-300 border-t-indigo-600" />
+              {loadingStage || "Searching"}
+            </>
+          ) : (
+            "Search"
+          )}
         </button>
       </div>
     </form>
