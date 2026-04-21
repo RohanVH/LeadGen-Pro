@@ -1,5 +1,6 @@
 import React from "react";
 import { getTimeData } from "../utils/timeUtils";
+import { getAISuggestion } from "../utils/aiSuggestion";
 
 const TimeInsights = ({ country, businessType, lat, lng }) => {
     const [, setTick] = React.useState(0);
@@ -15,6 +16,7 @@ const TimeInsights = ({ country, businessType, lat, lng }) => {
     if (!country) return null;
 
     const data = getTimeData({ country, lat, lng });
+    const aiSuggestion = getAISuggestion(businessType, data.isBusinessTime);
 
     if (!data) {
         return (
@@ -32,7 +34,7 @@ const TimeInsights = ({ country, businessType, lat, lng }) => {
             {/* Time */}
             <div className="space-y-1 text-sm">
                 <p>🕒 Current Time: <b>{data.countryTime}</b></p>
-                <p>🇮🇳 Your Time (IST): <b>{data.istTime}</b></p>
+                <p> &npbs; 🇮🇳  &npbs;Your Time (IST): <b>{data.istTime}</b></p>
             </div>
 
             {/* Best Time */}
@@ -88,6 +90,12 @@ const TimeInsights = ({ country, businessType, lat, lng }) => {
                                 : "Best during working hours (10 AM – 5 PM)."}
                     </p>
                 )}
+            </div>
+            <div className="mt-4 border-t border-gray-700 pt-3 text-sm">
+                <p className="text-indigo-400 font-semibold">🤖 AI Suggestion</p>
+                <p className="mt-1 text-gray-300 italic">
+                    {aiSuggestion}
+                </p>
             </div>
         </div>
     );
