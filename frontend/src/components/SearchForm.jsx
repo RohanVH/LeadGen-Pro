@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import ContactTimingIntelligence from "../contactTiming";
+import { useEffect } from "react";
 
 function SearchForm({ onSearch, loading, loadingStage }) {
-  const [timingIntelligence] = useState(() => new ContactTimingIntelligence());
+  const [showTiming, setShowTiming] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [businessType, setBusinessType] = useState('General');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -12,11 +15,14 @@ function SearchForm({ onSearch, loading, loadingStage }) {
       country: formData.get("country"),
       city: formData.get("city"),
     };
+    setSelectedCountry(formData.get("country"));
+    setBusinessType('General');
     onSearch(query);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:gap-6">
         <div>
           <label htmlFor="type" className="block text-sm font-medium text-slate-900 dark:text-white">
@@ -102,7 +108,16 @@ function SearchForm({ onSearch, loading, loadingStage }) {
           )}
         </button>
       </div>
-    </form>
+      </form>
+
+      {showTiming && selectedCountry && (
+        <ContactTimingIntelligence
+          selectedCountry={selectedCountry}
+          businessType={businessType}
+          onBusinessTypeChange={setBusinessType}
+        />
+      )}
+    </>
   );
 }
 
