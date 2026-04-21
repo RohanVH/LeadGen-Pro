@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import BusinessTypeSelect from "./BusinessTypeSelect";
 import CountrySelect from "./CountrySelect";
 import LocationDropdown from "./LocationDropdown";
+import TimeInsights from "./TimeInsights";
 
 const initialForm = {
   category: "",
@@ -100,9 +101,8 @@ function SearchForm({ onSearch, loading, loadingStage }) {
             </div>
           </div>
           <div
-            className={`min-h-[1.25rem] overflow-hidden text-xs font-semibold text-indigo-600 transition-all duration-300 dark:text-indigo-300 ${
-              loading ? "max-h-8 opacity-100" : "max-h-0 opacity-0"
-            }`}
+            className={`min-h-[1.25rem] overflow-hidden text-xs font-semibold text-indigo-600 transition-all duration-300 dark:text-indigo-300 ${loading ? "max-h-8 opacity-100" : "max-h-0 opacity-0"
+              }`}
             aria-live="polite"
           >
             {loadingStage || "Fetching leads..."}
@@ -129,19 +129,28 @@ function SearchForm({ onSearch, loading, loadingStage }) {
           value={
             form.placeId
               ? {
-                  city: form.city,
-                  state: form.state,
-                  country: form.country,
-                  lat: form.lat,
-                  lng: form.lng,
-                  displayName: form.displayName,
-                  placeId: form.placeId,
-                }
+                city: form.city,
+                state: form.state,
+                country: form.country,
+                lat: form.lat,
+                lng: form.lng,
+                displayName: form.displayName,
+                placeId: form.placeId,
+              }
               : null
           }
           onChange={setLocation}
         />
       </div>
+
+      
+      <div className="sm:col-span-12">
+        <TimeInsights
+          country={form.country}
+          businessType={form.type}
+        />
+      </div>
+
 
       <div className="sm:col-span-1 sm:self-end">
         <button
@@ -156,7 +165,9 @@ function SearchForm({ onSearch, loading, loadingStage }) {
           {loading ? loadingStage || "Fetching leads..." : "Search"}
         </button>
       </div>
+
     </form>
+
   );
 }
 
