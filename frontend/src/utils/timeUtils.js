@@ -1,36 +1,30 @@
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import ct from "countries-and-timezones";
+import tzlookup from "tz-lookup";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-
-// 🔥 AUTO DETECT TIMEZONE FROM COUNTRY
-function getTimezoneFromCountry(countryName) {
-  const countries = ct.getAllCountries();
-
-  const country = Object.values(countries).find(
-    (c) => c.name.toLowerCase() === countryName.toLowerCase()
-  );
-
-  if (!country) return null;
-
-  // take first timezone
-  return country.timezones[0];
-}
 
 function isWeekend(day) {
   return day === 0 || day === 6;
 }
 
-export function getTimeData(country) {
-  let tz = getTimezoneFromCountry(country);
+export function getTimeData({ country, lat, lng }) {
+  let tz = null;
 
-  // fallback
-  if (!tz) {
-    console.warn("Timezone not found for:", country);
-    tz = "UTC";
+  // 🔥 1. BEST: detect using lat/lng
+  if (lat && lng) {
+    try {
+      tz = tzlookup(lat, lng);
+    } catch (err) {
+      console.warn("tz lookup failed:", err);
+    }
+  }
+
+  // 🔥 2. fallback using country
+  if (!tz && country) {
+    tz = "UTC"; // safe fallback
   }
 
   const nowIST = dayjs().tz("Asia/Kolkata");

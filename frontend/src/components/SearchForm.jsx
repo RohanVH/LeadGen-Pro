@@ -143,11 +143,13 @@ function SearchForm({ onSearch, loading, loadingStage }) {
         />
       </div>
 
-      
+
       <div className="sm:col-span-12">
         <TimeInsights
           country={form.country}
           businessType={form.type}
+          lat={form.lat}
+          lng={form.lng}
         />
       </div>
 
