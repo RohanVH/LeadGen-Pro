@@ -111,26 +111,56 @@ class GooglePlacesService:
         """Fetch location autocomplete suggestions."""
         logger.debug("autocomplete_locations query=%r country=%r", query, country)
         if not self._ensure_api_key():
-            return [
-                {
-                    "place_id": f"fallback:{country or 'none'}:{query[:80]}",
-                    "description": query,
-                    "structured_formatting": {"main_text": query, "secondary_text": country or ""},
-                }
-            ]
+            return []
         params = {
-            "input": f"{query}, {country}" if country else query,
-            "types": "(regions)",
+            "input": query,
+            "types": "(cities)",
             "key": self._settings.google_places_api_key,
         }
+        country_code_map = {
+            "India": "in",
+            "United States": "us",
+            "United Kingdom": "gb",
+            "Canada": "ca",
+            "Australia": "au",
+            "Germany": "de",
+            "France": "fr",
+            "Armenia": "am",
+            "UAE": "ae",
+            "Singapore": "sg",
+            "United Arab Emirates": "ae",
+        }
+        if country:
+            code = country_code_map.get(country)
+            if code:
+                params["components"] = f"country:{code}"
         payload = self._safe_request(self._settings.google_places_autocomplete_url, params)
         if not payload:
             return []
         api_status = payload.get("status", "UNKNOWN")
         if api_status not in {"OK", "ZERO_RESULTS"}:
-            logger.warning("Places Autocomplete status=%s", api_status)
+            logger.warning(
+                "Places Autocomplete status=%s error=%r query=%r country=%r",
+                api_status,
+                payload.get("error_message"),
+                query,
+                country,
+            )
             return []
-        return payload.get("predictions", [])
+        results: list[dict[str, Any]] = []
+        for item in payload.get("predictions", []):
+            place_id = item.get("place_id")
+            if not place_id:
+                continue
+            results.append(
+                {
+                    "placeId": place_id,
+                    "mainText": item.get("structured_formatting", {}).get("main_text", ""),
+                    "secondaryText": item.get("structured_formatting", {}).get("secondary_text", ""),
+                }
+            )
+        logger.info("Google autocomplete output for query=%r country=%r: %s", query, country, results)
+        return results
 
     def popular_locations(self, country: str) -> list[dict[str, Any]]:
         """Fetch popular locations fallback."""
@@ -139,19 +169,19 @@ class GooglePlacesService:
             logger.info("No places from Text Search; using static city fallbacks for %s", country)
             return [
                 {
-                    "place_id": f"fallback:{country}:Mumbai",
-                    "name": "Mumbai",
-                    "formatted_address": country,
+                    "placeId": f"seed:{country}:Mumbai",
+                    "mainText": "Mumbai",
+                    "secondaryText": country,
                 },
                 {
-                    "place_id": f"fallback:{country}:Delhi",
-                    "name": "Delhi",
-                    "formatted_address": country,
+                    "placeId": f"seed:{country}:Delhi",
+                    "mainText": "Delhi",
+                    "secondaryText": country,
                 },
                 {
-                    "place_id": f"fallback:{country}:Bangalore",
-                    "name": "Bangalore",
-                    "formatted_address": country,
+                    "placeId": f"seed:{country}:Bangalore",
+                    "mainText": "Bangalore",
+                    "secondaryText": country,
                 },
             ]
         deduped: list[dict[str, Any]] = []
@@ -161,7 +191,15 @@ class GooglePlacesService:
             if name not in seen and len(deduped) < 10:
                 seen.add(name)
                 deduped.append(place)
-        return deduped
+        return [
+            {
+                "placeId": place.get("place_id"),
+                "mainText": place.get("name", ""),
+                "secondaryText": place.get("formatted_address", ""),
+            }
+            for place in deduped
+            if place.get("place_id")
+        ]
 
     def get_location_details(self, place_id: str) -> dict[str, Any]:
         """Fetch location details."""
@@ -178,4 +216,33 @@ class GooglePlacesService:
         if payload.get("status") != "OK":
             logger.warning("Places location details status=%s", payload.get("status"))
             return {}
-        return payload.get("result", {})
+        result = payload.get("result", {})
+        components = result.get("address_components", [])
+
+        def find_component(*types: str) -> str:
+            for component in components:
+                component_types = component.get("types", [])
+                if any(component_type in component_types for component_type in types):
+                    return component.get("long_name", "")
+            return ""
+
+        geometry = result.get("geometry", {}).get("location", {})
+        lat = geometry.get("lat")
+        lng = geometry.get("lng")
+        normalized = {
+            "city": (
+                find_component("locality", "postal_town", "administrative_area_level_2")
+                or find_component("sublocality", "neighborhood")
+                or result.get("name")
+                or ""
+            ),
+            "state": find_component("administrative_area_level_1") or "",
+            "country": find_component("country") or "",
+            "lat": float(lat) if lat is not None else 0.0,
+            "lng": float(lng) if lng is not None else 0.0,
+            "displayName": result.get("formatted_address") or result.get("name") or "",
+            "placeId": place_id,
+        }
+        logger.info("Google location details place_id=%s", place_id)
+        logger.info("Google location details output: %s", normalized)
+        return normalized

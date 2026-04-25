@@ -181,9 +181,15 @@ function LocationDropdown({ country, value, onChange }) {
     setError("");
 
     try {
+      console.log("Selected:", suggestion);
       let resolvedPlaceId = suggestion.placeId;
 
-      if (suggestion.isSeed || suggestion.placeId.startsWith("dataset:")) {
+      if (!resolvedPlaceId) {
+        setError("Unable to select this location.");
+        return;
+      }
+
+      if (suggestion.isSeed || resolvedPlaceId.startsWith("dataset:")) {
         const seedCacheKey = `${country}:${suggestion.mainText}`;
         const cachedDetails = detailsCacheRef.current.get(seedCacheKey);
         if (cachedDetails) {
@@ -203,9 +209,14 @@ function LocationDropdown({ country, value, onChange }) {
           return;
         }
         resolvedPlaceId = bestMatch.placeId;
+        if (!resolvedPlaceId) {
+          setError("Unable to select this location.");
+          return;
+        }
       }
 
       const details = await fetchLocationDetails(resolvedPlaceId);
+      console.log("Location details response:", details);
       if (suggestion.isSeed || suggestion.placeId.startsWith("dataset:")) {
         detailsCacheRef.current.set(`${country}:${suggestion.mainText}`, details);
       }
