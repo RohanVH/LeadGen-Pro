@@ -27,11 +27,12 @@ def test_locations_autocomplete_returns_place_ids() -> None:
 
 def test_locations_popular_returns_suggestions() -> None:
     client = TestClient(app)
-    response = client.get("/locations/popular", params={"country": "United States"})
+    response = client.get("/locations/popular", params={"country": "Australia"})
     assert response.status_code == 200
     data = response.json()
     assert "suggestions" in data
     assert len(data["suggestions"]) >= 1
+    assert data["suggestions"][0]["secondaryText"] == "Australia"
 
 
 def test_locations_details_supports_seed_place_ids() -> None:

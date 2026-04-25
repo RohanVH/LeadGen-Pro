@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_lead_service
 from app.schemas.lead import LeadSearchResponse
 from app.schemas.search import LeadSearchParams
+from app.services.google_places import PlacesAPIError
 from app.services.lead_service import LeadService
 from app.utils.csv_exporter import leads_to_csv
 
@@ -27,14 +28,17 @@ async def search_leads(
 ) -> LeadSearchResponse:
     """Search leads by city and business type."""
     params = LeadSearchParams(city=city, type=type, country=country, offset=offset, limit=limit)
-    leads, total, has_more = await lead_service.search(
-        city=params.city,
-        business_type=params.business_type,
-        country=params.country,
-        offset=params.offset,
-        limit=params.limit,
-    )
-    return LeadSearchResponse(total=total, leads=leads, hasMore=has_more)
+    try:
+        leads, total, has_more = await lead_service.search(
+            city=params.city,
+            business_type=params.business_type,
+            country=params.country,
+            offset=params.offset,
+            limit=params.limit,
+        )
+        return LeadSearchResponse(total=total, leads=leads, hasMore=has_more)
+    except PlacesAPIError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/export")
@@ -46,13 +50,16 @@ async def export_leads_csv(
 ) -> StreamingResponse:
     """Export searched leads as CSV."""
     params = LeadSearchParams(city=city, type=type, country=country)
-    leads, _, _ = await lead_service.search(
-        city=params.city,
-        business_type=params.business_type,
-        country=params.country,
-        offset=0,
-        limit=300,
-    )
+    try:
+        leads, _, _ = await lead_service.search(
+            city=params.city,
+            business_type=params.business_type,
+            country=params.country,
+            offset=0,
+            limit=300,
+        )
+    except PlacesAPIError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     csv_content = leads_to_csv(leads)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -63,4 +70,3 @@ async def export_leads_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
-

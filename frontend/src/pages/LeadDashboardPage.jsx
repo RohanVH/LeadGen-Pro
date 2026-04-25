@@ -118,7 +118,7 @@ function LeadDashboardPage() {
 
       {error ? (
         <div className="rounded-2xl border border-red-300/80 bg-red-50 px-4 py-3 text-sm font-medium text-red-800 shadow-sm dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200">
-          Something went wrong. Please try again.
+          {error}
         </div>
       ) : null}
 

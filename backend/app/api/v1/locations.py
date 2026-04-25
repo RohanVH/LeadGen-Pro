@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_google_places_service, get_location_dataset_service
 from app.schemas.location import LocationSuggestion, LocationSuggestionsResponse, SelectedLocation
-from app.services.google_places import GooglePlacesService
+from app.services.google_places import GooglePlacesService, PlacesAPIError
 from app.services.location_dataset import LocationDatasetService
 from app.utils.location_seeds import LOCATION_SEEDS
 
@@ -143,18 +143,21 @@ def popular_locations(
             ]
             return LocationSuggestionsResponse(suggestions=suggestions)
 
-        places = places_service.popular_locations(country=country)
-        if places:
-            suggestions = [
-                LocationSuggestion(
-                    placeId=str(place.get("placeId") or f"unknown:{country}:{place.get('mainText', '')}"),
-                    mainText=place.get("mainText", ""),
-                    secondaryText=place.get("secondaryText", ""),
-                )
-                for place in places[:20]
-                if place.get("placeId")
-            ]
-            return LocationSuggestionsResponse(suggestions=suggestions)
+        try:
+            places = places_service.popular_locations(country=country)
+            if places:
+                suggestions = [
+                    LocationSuggestion(
+                        placeId=str(place.get("placeId") or f"unknown:{country}:{place.get('mainText', '')}"),
+                        mainText=place.get("mainText", ""),
+                        secondaryText=place.get("secondaryText", ""),
+                    )
+                    for place in places[:20]
+                    if place.get("placeId")
+                ]
+                return LocationSuggestionsResponse(suggestions=suggestions)
+        except PlacesAPIError:
+            logger.warning("Popular locations falling back to seeds for country=%r", country)
 
         seed_locations = LOCATION_SEEDS.get(country, [])
         suggestions = [

@@ -8,8 +8,13 @@ from typing import Any
 
 import requests
 from app.core.config import Settings
+from app.utils.location_seeds import LOCATION_SEEDS
 
 logger = logging.getLogger(__name__)
+
+
+class PlacesAPIError(RuntimeError):
+    """Raised when Google Places rejects a request in a way the UI should surface."""
 
 
 class GooglePlacesService:
@@ -72,6 +77,11 @@ class GooglePlacesService:
 
             if api_status not in {"OK", "ZERO_RESULTS"}:
                 logger.warning("Places Text Search status=%s", api_status)
+                if api_status == "REQUEST_DENIED":
+                    raise PlacesAPIError(
+                        payload.get("error_message")
+                        or "Google Places search is currently unavailable for this project."
+                    )
                 break
 
             for result in payload.get("results", []):
@@ -169,20 +179,11 @@ class GooglePlacesService:
             logger.info("No places from Text Search; using static city fallbacks for %s", country)
             return [
                 {
-                    "placeId": f"seed:{country}:Mumbai",
-                    "mainText": "Mumbai",
+                    "placeId": f"seed:{country}:{city}",
+                    "mainText": city,
                     "secondaryText": country,
-                },
-                {
-                    "placeId": f"seed:{country}:Delhi",
-                    "mainText": "Delhi",
-                    "secondaryText": country,
-                },
-                {
-                    "placeId": f"seed:{country}:Bangalore",
-                    "mainText": "Bangalore",
-                    "secondaryText": country,
-                },
+                }
+                for city in LOCATION_SEEDS.get(country, [])[:10]
             ]
         deduped: list[dict[str, Any]] = []
         seen: set[str] = set()
