@@ -4,7 +4,7 @@ import os
 from functools import lru_cache
 from typing import List
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,6 +12,13 @@ class Settings(BaseSettings):
     """Centralized runtime settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def strip_env_strings(cls, value):
+        if isinstance(value, str):
+            return value.strip()
+        return value
 
     app_name: str = Field(default="LeadGen Pro API", alias="APP_NAME")
     app_env: str = Field(default="development", alias="APP_ENV")
